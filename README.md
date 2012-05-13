@@ -22,13 +22,14 @@ If you're running Trac < 0.13, install http://trac-hacks.org/wiki/GitPlugin.
 Setup
 -----
 
-[components]
-trac.versioncontrol.web_ui.browser.BrowserModule = disabled
-trac.versioncontrol.web_ui.changeset.ChangesetModule = disabled
-tracext.git.* = enabled
-tracext.github.* = enabled
+    [components]
+    trac.versioncontrol.web_ui.browser.BrowserModule = disabled
+    trac.versioncontrol.web_ui.changeset.ChangesetModule = disabled
+    trac.versioncontrol.web_ui.log.LogModule = disabled
+    tracext.git.* = enabled
+    tracext.github.* = enabled
 
-[github]
-autopull = enabled
-repository = <user>/<project>
-token = <secret token>
+    [github]
+    autopull = enabled
+    repository = <user>/<project>
+    token = <secret token>
