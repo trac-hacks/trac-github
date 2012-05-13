@@ -13,12 +13,12 @@ from trac.web.api import IRequestHandler
 class GitHubBrowser(ChangesetModule):
     implements(IRequestHandler)
 
-    gh_repo = Option('github', 'repository', 'master',
+    gh_repo = Option('github', 'repository', '',
             doc="Repository name on GitHub (<user>/<project>)")
 
     def match_request(self, req):
         if not self.gh_repo:
-            return False
+            return super(GitHubBrowser, self).match_request(req)
 
         match = self._request_re.match(req.path_info)
         if match:
@@ -28,6 +28,9 @@ class GitHubBrowser(ChangesetModule):
             return True
 
     def process_request(self, req):
+        if not self.gh_repo:
+            return super(GitHubBrowser, self).process_request(req)
+
         rev = req.args.get('rev')
         path = req.args.get('path')
         rm = RepositoryManager(self.env)
