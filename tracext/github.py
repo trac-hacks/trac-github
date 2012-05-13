@@ -41,7 +41,7 @@ class GitHubBrowser(ChangesetModule):
         except NoSuchChangeset, e:
             raise ResourceNotFound(e.message, _('Invalid Changeset Number'))
 
-        if path:
+        if path and path != '/':
             # GitHub will s/blob/tree/ if the path is a directory
             url = 'https://github.com/%s/blob/%s/%s' % (self.gh_repo, rev,
                     path.lstrip('/'))
