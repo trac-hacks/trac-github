@@ -23,6 +23,12 @@ For the best results, create a bare clone of your git repository:
 
     git clone --bare --no-checkout git://github.com/<user>/<project>.git /path/to/bare-clone
 
+Ensure that the user under which your web server runs can fetch into this
+repository. You'll probably have to adjust permissions.
+
+    su www-data
+    git --git-dir=/path/to/bare-clone fetch
+
 Setup
 -----
 

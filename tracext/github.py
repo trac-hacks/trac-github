@@ -61,7 +61,7 @@ class GitHubPostCommitHook(Component):
     token = Option('github', 'token', '',
             doc="Secret token used in GitHub's Trac hook")
     autofetch = BoolOption('github', 'autofetch', 'enabled',
-            doc="Pull from GitHub after each commit")
+            doc="Fetch from GitHub after each commit")
 
     # IRequestHandler methods
 
