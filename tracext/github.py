@@ -25,6 +25,11 @@ class GitHubBrowser(ChangesetModule):
             rev, path = match.groups()
             req.args['rev'] = rev
             req.args['path'] = path or '/'
+            # GitHub sends Content-Type: application/x-www-form-urlencoded
+            # which is wrong and triggers Trac's CSRF protection. Hack.
+            headers = [h for h in req._inheaders if h[0] != 'content-type']
+            headers.append(('content-type', 'application/json'))
+            req._inheaders = headers
             return True
 
     def process_request(self, req):
