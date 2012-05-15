@@ -60,7 +60,7 @@ class GitHubPostCommitHook(Component):
 
     token = Option('github', 'token', '',
             doc="Secret token used in GitHub's Trac hook")
-    autopull = BoolOption('github', 'autopull', 'enabled',
+    autofetch = BoolOption('github', 'autofetch', 'enabled',
             doc="Pull from GitHub after each commit")
 
     # IRequestHandler methods
@@ -88,11 +88,11 @@ class GitHubPostCommitHook(Component):
         rm = RepositoryManager(self.env)
         reponame, repos, path = rm.get_repository_by_path(path)
 
-        output = u'Running hook on %s\n' % reponame
+        output = u'Running hook on %s\n' % (reponame or '(default)')
 
-        if self.autopull:
-            output += u'Running git pull --ff-only\n'
-            output += repos.git.repo.pull('--ff-only')
+        if self.autofetch:
+            output += u'Running git fetch\n'
+            output += repos.git.repo.fetch()
 
         data = req.args.get('payload')
         if data:

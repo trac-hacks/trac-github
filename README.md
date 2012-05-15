@@ -19,6 +19,10 @@ Requirements
 
 If you're running Trac < 0.13, install http://trac-hacks.org/wiki/GitPlugin.
 
+For the best results, create a bare clone of your git repository:
+
+    git clone --bare --no-checkout git://github.com/<user>/<project>.git /path/to/bare-clone
+
 Setup
 -----
 
@@ -30,6 +34,10 @@ Setup
     tracext.github.* = enabled
 
     [github]
-    autopull = enabled
+    autofetch = enabled
     repository = <user>/<project>
     token = <secret token>
+
+    [trac]
+    repository_dir = /path/to/bare-clone
+    repository_type = git
