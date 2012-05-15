@@ -1,0 +1,88 @@
+In Trac, req.args['payload'] is a JSON string. Here's an example
+(indented for readability).
+
+{
+  "forced": false,
+  "compare": "https://github.com/<user>/<project>/compare/<chgset>...<chgset>",
+  "pusher": {
+    "name": "<pusher_name>"
+  },
+  "repository": {
+    "fork": false,
+    "has_wiki": false,
+    "name": "<project>",
+    "language": "Python",
+    "has_downloads": true,
+    "url": "https://github.com/<user>/<project>",
+    "created_at": "<datetime>",
+    "description": "<description>",
+    "private": false,
+    "pushed_at": "<datetime>",
+    "owner": {
+      "name": "<name>",
+      "email": "<email>"
+    },
+    "watchers": <int>,
+    "organization": "<name>",
+    "open_issues": <int>,
+    "has_issues": false,
+    "forks": <int>,
+    "homepage": "<url>",
+    "size": <int>
+  },
+  "head_commit": {
+    "committer": {
+      "username": "<username>",
+      "name": "<name>",
+      "email": "<email>"
+    },
+    "added": [],
+    "author": {
+      "username": "<username>",
+      "name": "<name>",
+      "email": "<email>"
+    },
+    "url": "https://github.com/<user>/<project>/commit/<changeset>",
+    "timestamp": "<iso datetime>",
+    "modified": [
+      "<path1>",
+      "<path2>",
+      "..."
+    ],
+    "distinct": true,
+    "message": "<commit message>",
+    "removed": [],
+    "id": "<changeset>"
+  },
+  "deleted": false,
+  "commits": [
+    {
+      "committer": {
+        "username": "<username>",
+        "name": "<name>",
+        "email": "<email>"
+      },
+      "added": [],
+      "author": {
+        "username": "<username>",
+        "name": "<name>",
+        "email": "<email>"
+      },
+      "url": "https://github.com/<user>/<project>/commit/<changeset>",
+      "timestamp": "<iso datetime>",
+      "modified": [
+        "<path1>",
+        "<path2>",
+        "..."
+      ],
+      "distinct": true,
+      "message": "<commit message>",
+      "removed": [],
+      "id": "<changeset>"
+    }
+  ],
+  "after": "<changeset>",
+  "created": false,
+  "ref": "refs/heads/master",
+  "before": "<changeset>"
+}
