@@ -103,7 +103,7 @@ class GitHubPostCommitHook(Component):
 
         data = req.args.get('payload')
         if data:
-            revs = [str(commit['id']) for commit in json.loads(data)]
+            revs = [commit['id'] for commit in json.loads(data)['commits']]
             if revs:
                 output += u'* Adding changesets %s\n' % u', '.join(revs)
                 rm.notify('changeset_added', reponame, revs)
