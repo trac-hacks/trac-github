@@ -33,6 +33,10 @@ to [install the the git plugin](http://trac-hacks.org/wiki/GitPlugin). Hint:
 
     pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
 
+Install trac-github itself:
+
+    pip install -e git://github.com/aaugustin/trac-github.git#egg=TracGitHub-dev
+
 Setup
 -----
 
@@ -101,4 +105,4 @@ License
 
 This plugin is released under the BSD license.
 
-It was written for [Django's Trac](https://code.djangoproject.com/).
+It was initially written for [Django's Trac](https://code.djangoproject.com/).
