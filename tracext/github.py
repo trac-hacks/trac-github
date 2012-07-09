@@ -91,15 +91,8 @@ class GitHubPostCommitHook(Component):
         output = u'Running hook on %s\n' % (reponame or '(default)')
 
         if self.autofetch:
-            git = repos.git.repo
-            output += u'* Running git fetch\n'
-            output += git.fetch()
-            output += u'* Updating references\n'
-            remote_refs = git.for_each_ref(
-                    "--format=%(refname)", "refs/remotes/origin").split()
-            for remote_ref in remote_refs:
-                local_ref = remote_ref.replace('remotes/origin', 'heads', 1)
-                output += git.update_ref(local_ref, remote_ref)
+            output += u'* Updating clone\n'
+            output += repos.git.repo.remote_update()
 
         data = req.args.get('payload')
         if data:

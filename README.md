@@ -7,7 +7,7 @@ Features
 This Trac plugin performs three functions:
 
 - notify Trac of new commits after each push to GitHub;
-- update the local clone used by Trac after each push (optional);
+- update the local mirror used by Trac after each push (optional);
 - replace Trac's built-in browser by GitHub's (optional).
 
 The notification of new commits is strictly equivalent to the command described
@@ -28,8 +28,8 @@ Requirements
 trac-github requires Trac >= 0.12.
 
 Trac >= 0.13 [includes the git plugin](http://trac.edgewall.org/wiki/TracGit).
-You only need to enable it in `trac.ini`. For older versions of Trac, you have
-to [install the the git plugin](http://trac-hacks.org/wiki/GitPlugin). Hint:
+You only need to enable it in `trac.ini`. For Trac 0.12, you have to [install
+the git plugin](http://trac-hacks.org/wiki/GitPlugin). Hint:
 
     pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
 
@@ -43,19 +43,17 @@ Setup
 _Warning: the commands below are provided for illustrative purposes. You'll have
 to adapt them to your setup._
 
-You need a clone of your GitHub repository for Trac's use. If you intend to
-enable autofetch, the clone must be writable by the webserver. For the best
-results, create a bare clone, like this:
+You need a mirror of your GitHub repository for Trac's use. If you intend to
+enable autofetch, the mirror must be writable by the webserver. To create it:
 
     cd /home/trac
-    git clone --bare --no-checkout git://github.com/<user>/<project>.git
+    git clone --mirror git://github.com/<user>/<project>.git
     chown -R www-data:www-data <project.git>
 
-Ensure that the user under which your web server runs can fetch into this
-repository:
+Ensure that the user under which your web server runs can update the mirror:
 
     su www-data
-    git --git-dir=/home/trac/<project.git> fetch
+    git --git-dir=/home/trac/<project.git> remote update
 
 Now edit your `trac.ini` as follows to configure both the git and the
 trac-github plugins:
@@ -93,9 +91,8 @@ trac-github provides two components that you can enable separately.
   URLs of Trac, if you enable this pluign, you must disable three components in
   `trac.versioncontrol.web_ui`, as shown in the configuration file above.
 * **`tracext.github.GitHubPostCommitHook`** is the post-commit hook called by
-  GitHub. If the `autofetch` option is enabled, the local clone used by Trac
-  will be updated. Specifically, the branches will point to the same commits as
-  on GitHub. The plugin will then trigger a cache update and notify components
+  GitHub. If the `autofetch` option is enabled, the mirror used by Trac will be
+  updated. The plugin will then trigger a cache update and notify components
   about the new changesets. This is useful in combination with Trac's [commit
   ticket updater](http://trac.edgewall.org/wiki/CommitTicketUpdater) and
   [notifications](http://trac.edgewall.org/wiki/TracNotification).
