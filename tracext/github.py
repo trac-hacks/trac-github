@@ -92,7 +92,7 @@ class GitHubPostCommitHook(Component):
 
         if self.autofetch:
             output += u'* Updating clone\n'
-            output += repos.git.repo.remote_update()
+            output += repos.git.repo.remote('update')
 
         data = req.args.get('payload')
         if data:
