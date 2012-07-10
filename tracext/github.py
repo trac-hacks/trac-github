@@ -101,4 +101,7 @@ class GitHubPostCommitHook(Component):
                 output += u'* Adding changesets %s\n' % u', '.join(revs)
                 rm.notify('changeset_added', reponame, revs)
 
+        for line in output.splitlines():
+            self.log.debug(line)
+
         req.send(output.encode('utf-8'), 'text/plain', 200 if output else 204)
