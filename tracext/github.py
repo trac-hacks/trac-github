@@ -1,11 +1,11 @@
 import json
 import re
 
-from trac.config import BoolOption, Option
+from trac.config import Option
 from trac.core import Component, implements
 from trac.resource import ResourceNotFound
 from trac.util.translation import _
-from trac.versioncontrol.api import NoSuchChangeset, RepositoryManager
+from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
 from trac.web.api import IRequestHandler
 
@@ -13,11 +13,11 @@ from trac.web.api import IRequestHandler
 class GitHubBrowser(ChangesetModule):
     implements(IRequestHandler)
 
-    gh_repo = Option('github', 'repository', '',
+    repository = Option('github', 'repository', '',
             doc="Repository name on GitHub (<user>/<project>)")
 
     def match_request(self, req):
-        if not self.gh_repo:
+        if not self.repository:                             # pragma: no cover
             return super(GitHubBrowser, self).match_request(req)
 
         match = self._request_re.match(req.path_info)
@@ -28,13 +28,19 @@ class GitHubBrowser(ChangesetModule):
             return True
 
     def process_request(self, req):
-        if not self.gh_repo:
+        if not self.repository:                             # pragma: no cover
             return super(GitHubBrowser, self).process_request(req)
 
         rev = req.args.get('rev')
         path = req.args.get('path')
+
         rm = RepositoryManager(self.env)
         reponame, repos, path = rm.get_repository_by_path(path)
+
+        if is_default(reponame):
+            gh_repo = self.config.get('github', 'repository')
+        else:
+            gh_repo = self.config.get('github', '%s.repository' % reponame)
 
         try:
             rev = repos.normalize_rev(rev)
@@ -42,34 +48,28 @@ class GitHubBrowser(ChangesetModule):
             raise ResourceNotFound(e.message, _('Invalid Changeset Number'))
 
         if path and path != '/':
+            path = path.lstrip('/')
             # GitHub will s/blob/tree/ if the path is a directory
-            url = 'https://github.com/%s/blob/%s/%s' % (self.gh_repo, rev,
-                    path.lstrip('/'))
+            url = 'https://github.com/%s/blob/%s/%s' % (gh_repo, rev, path)
         else:
-            url = 'https://github.com/%s/commit/%s' % (self.gh_repo, rev)
+            url = 'https://github.com/%s/commit/%s' % (gh_repo, rev)
         req.redirect(url)
 
 
 class GitHubPostCommitHook(Component):
     implements(IRequestHandler)
 
-    token = Option('github', 'token', '',
-            doc="Secret token used in GitHub's Trac hook")
-    autofetch = BoolOption('github', 'autofetch', 'enabled',
-            doc="Fetch from GitHub after each commit")
-
     # IRequestHandler methods
 
-    _request_re = re.compile(r"/github/([^/]+)(/.*)?$")
+    _request_re = re.compile(r"/github(/.*)?$")
 
     def match_request(self, req):
         match = self._request_re.match(req.path_info)
         if match:
-            token, path = match.groups()
-            req.args['token'] = token
-            req.args['path'] = path or '/'
-            # GitHub sends Content-Type: application/x-www-form-urlencoded
-            # which is wrong and triggers Trac's CSRF protection. Hack.
+            req.args['path'] = match.group(1) or '/'
+            # GitHub wraps the JSON payload in an urlencoded body and sends a
+            # Content-Type: application/x-www-form-urlencoded header.
+            # Unfortunately this triggers Trac's CSRF protection. Disable it.
             headers = [h for h in req._inheaders if h[0] != 'content-type']
             headers.append(('content-type', 'application/json'))
             req._inheaders = headers
@@ -78,28 +78,38 @@ class GitHubPostCommitHook(Component):
     def process_request(self, req):
         if req.method != 'POST':
             msg = u'Method not allowed (%s)\n' % req.method
+            self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 405)
 
-        if req.args.get('token') != self.token:
-            msg = u'Invalid token (%s)\n' % req.args.get('token')
-            req.send(msg.encode('utf-8'), 'text/plain', 403)
+        path = req.args['path']
 
-        path = req.args.get('path', '/')
         rm = RepositoryManager(self.env)
         reponame, repos, path = rm.get_repository_by_path(path)
 
+        if path != '/':
+            msg = u'No such repository (%s)\n' % path
+            self.log.warning(msg.rstrip('\n'))
+            req.send(msg.encode('utf-8'), 'text/plain', 400)
+
         output = u'Running hook on %s\n' % (reponame or '(default)')
 
-        if self.autofetch:
-            output += u'* Updating clone\n'
-            output += repos.git.repo.remote('update', '--prune')
+        output += u'* Updating clone\n'
+        output += repos.git.repo.remote('update', '--prune')
 
-        data = req.args.get('payload')
-        if data:
-            revs = [commit['id'] for commit in json.loads(data)['commits']]
-            if revs:
+        try:
+            payload = json.loads(req.args['payload'])
+            revs = [commit['id'] for commit in payload['commits']]
+        except (ValueError, KeyError):
+            msg = u'Invalid payload\n'
+            self.log.warning(msg.rstrip('\n'))
+            req.send(msg.encode('utf-8'), 'text/plain', 400)
+
+        if revs:
+            if len(revs) == 1:
+                output += u'* Adding changeset %s\n' % revs[0]
+            else:
                 output += u'* Adding changesets %s\n' % u', '.join(revs)
-                rm.notify('changeset_added', reponame, revs)
+            rm.notify('changeset_added', reponame, revs)
 
         for line in output.splitlines():
             self.log.debug(line)
