@@ -108,6 +108,7 @@ class TracGitHubTests(unittest.TestCase):
         conf.add_section('github')
         conf.set('github', 'repository', 'aaugustin/trac-github')
         conf.set('github', 'alt.repository', 'follower/trac-github')
+        conf.set('github', 'alt.branches', 'master stable/*')
 
         conf.add_section('repositories')
         conf.set('repositories', '.dir', os.path.realpath('%s-mirror' % GIT))
@@ -168,7 +169,8 @@ class TracGitHubTests(unittest.TestCase):
         repo = {'': GIT, 'alt': ALTGIT}[reponame]
 
         commits = []
-        log = subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'log', '-%d' % n, '--format=oneline'])
+        log = subprocess.check_output(['git', '--git-dir=%s/.git' % repo,
+                'log', '-%d' % n, '--branches', '--format=oneline'])
         for line in log.splitlines():
             id, _, message = line.partition(' ')
             commits.append({'id': id, 'message': message})
@@ -257,7 +259,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"Fetching origin\n"
-                                         r"\* Adding changeset [0-9a-f]{40}\n")
+                                         r"\* Adding commit [0-9a-f]{40}\n")
 
     def testMultipleCommits(self):
         self.makeGitCommit(GIT, 'bar', 'bar content\n')
@@ -266,7 +268,23 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"Fetching origin\n"
-                                         r"\* Adding changesets [0-9a-f]{40}, [0-9a-f]{40}\n")
+                                         r"\* Adding commits [0-9a-f]{40}, [0-9a-f]{40}\n")
+
+    def testCommitOnBranch(self):
+        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
+                'checkout', '-b', 'stable/1.0'], stderr=subprocess.PIPE)
+        self.makeGitCommit(ALTGIT, 'stable', 'stable branch\n')
+        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
+                'checkout', '-b', 'unstable'], stderr=subprocess.PIPE)
+        self.makeGitCommit(ALTGIT, 'unstable', 'unstable branch\n')
+        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
+                'checkout', 'master'], stderr=subprocess.PIPE)
+        output = self.openGitHubHook(2, 'alt').read()
+        self.assertRegexpMatches(output, r"Running hook on alt\n"
+                                         r"\* Updating clone\n"
+                                         r"Fetching origin\n"
+                                         r"\* Adding commit [0-9a-f]{40}\n"
+                                         r"\* Skipping commit [0-9a-f]{40}\n")
 
     def testNotification(self):
         env = Environment(ENV)

@@ -1,7 +1,8 @@
+import fnmatch
 import json
 import re
 
-from trac.config import Option
+from trac.config import ListOption, Option
 from trac.core import Component, implements
 from trac.resource import ResourceNotFound
 from trac.util.translation import _
@@ -37,10 +38,8 @@ class GitHubBrowser(ChangesetModule):
         rm = RepositoryManager(self.env)
         reponame, repos, path = rm.get_repository_by_path(path)
 
-        if is_default(reponame):
-            gh_repo = self.config.get('github', 'repository')
-        else:
-            gh_repo = self.config.get('github', '%s.repository' % reponame)
+        key = 'repository' if is_default(reponame) else '%s.repository' % reponame
+        gh_repo = self.config.get('github', key)
 
         try:
             rev = repos.normalize_rev(rev)
@@ -58,6 +57,9 @@ class GitHubBrowser(ChangesetModule):
 
 class GitHubPostCommitHook(Component):
     implements(IRequestHandler)
+
+    branches = ListOption('github', 'branches', sep=' ',
+            doc="Notify only commits on these branches to Trac")
 
     # IRequestHandler methods
 
@@ -86,6 +88,9 @@ class GitHubPostCommitHook(Component):
         rm = RepositoryManager(self.env)
         reponame, repos, path = rm.get_repository_by_path(path)
 
+        key = 'branches' if is_default(reponame) else '%s.branches' % reponame
+        branches = self.config.getlist('github', key, sep=' ')
+
         if path != '/':
             msg = u'No such repository (%s)\n' % path
             self.log.warning(msg.rstrip('\n'))
@@ -104,12 +109,34 @@ class GitHubPostCommitHook(Component):
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
 
-        if revs:
-            if len(revs) == 1:
-                output += u'* Adding changeset %s\n' % revs[0]
+        if branches:
+            added_revs, skipped_revs = [], []
+            for rev in revs:
+                rev_branches = repos.git.repo.branch('--contains', rev)
+                rev_branches = [l[2:] for l in rev_branches.splitlines()]
+                if any(fnmatch.fnmatchcase(rev_branch, branch)
+                        for rev_branch in rev_branches
+                        for branch in branches):
+                    added_revs.append(rev)
+                else:
+                    skipped_revs.append(rev)
+        else:
+            added_revs, skipped_revs = revs, []
+
+        if added_revs:
+            if len(added_revs) == 1:
+                output += u'* Adding commit %s\n' % added_revs[0]
             else:
-                output += u'* Adding changesets %s\n' % u', '.join(revs)
-            rm.notify('changeset_added', reponame, revs)
+                output += u'* Adding commits %s\n' % u', '.join(added_revs)
+
+            # This is where Trac gets notified of the commits in the changeset
+            rm.notify('changeset_added', reponame, added_revs)
+
+        if skipped_revs:
+            if len(skipped_revs) == 1:
+                output += u'* Skipping commit %s\n' % skipped_revs[0]
+            else:
+                output += u'* Skipping commits %s\n' % u', '.join(skipped_revs)
 
         for line in output.splitlines():
             self.log.debug(line)

@@ -88,6 +88,23 @@ tab, select WebHook URLs. Enter the URL of your Trac installation followed by
 You may want to restrict access this URL to GitHub's IPs. They're listed just
 under the form WebHook URLs setup form.
 
+Branches
+--------
+
+By default, trac-github notifies all the commits in each changeset to Trac.
+When you're merging a branch, the commits on the branch are notified again.
+This can result in duplicate ticket updates and notification emails. To avoid
+this, you can configure trac-github to only notify commits on some branches:
+
+    [github]
+    branches = master
+
+You can provide more than one branch name, and you can use [shell-style
+wildcards](http://docs.python.org/library/fnmatch):
+
+    [github]
+    branches = master stable/*
+
 Multiple repositories
 ---------------------
 
@@ -97,6 +114,7 @@ GitHub:
     [github]
     repository = <user>/<project>               # default repository
     <reponame>.repository = <user>/<project>    # for each extra repository
+    <reponame>.branches = <branches>            # optional
 
 When you configure the WebHook URLs, append the name used by Trac to identify
 the repository:
