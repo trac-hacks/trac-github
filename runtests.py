@@ -74,8 +74,9 @@ class TracGitHubTests(unittest.TestCase):
     def createGitRepositories(cls):
         subprocess.check_output(['git', 'init', GIT])
         subprocess.check_output(['git', 'init', ALTGIT])
-        cls.makeGitCommit(GIT, 'README', 'default git repository\n')
-        cls.makeGitCommit(ALTGIT, 'README', 'alternative git repository\n')
+        cls.makeGitCommit(GIT, 'README', 'default git repository\n', message='initial commit')
+        cls.makeGitCommit(GIT, 'README', 'Other branch of main repository\n', message='hidden commit', branch='hiddenbranch')
+        cls.makeGitCommit(ALTGIT, 'README', 'alternative git repository\n', message='initial alt commit')
         subprocess.check_output(['git', 'clone', '--mirror', GIT, '%s-mirror' % GIT])
         subprocess.check_output(['git', 'clone', '--mirror', ALTGIT, '%s-mirror' % ALTGIT])
 
@@ -108,6 +109,7 @@ class TracGitHubTests(unittest.TestCase):
         conf.add_section('github')
         conf.set('github', 'repository', 'aaugustin/trac-github')
         conf.set('github', 'alt.repository', 'follower/trac-github')
+        conf.set('github', 'branches', 'master stable/*')
         conf.set('github', 'alt.branches', 'master stable/*')
 
         conf.add_section('repositories')
@@ -154,10 +156,18 @@ class TracGitHubTests(unittest.TestCase):
         cls.tracd.wait()
 
     @staticmethod
-    def makeGitCommit(repo, path, content, message='edit'):
+    def makeGitCommit(repo, path, content, message='edit', branch='master'):
         path = os.path.join(repo, path)
         with open(path, 'wb') as fp:
             fp.write(content)
+        branchlist = subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'branch'])
+        if branchlist:
+            branchlist = [branchname.replace('*', '').strip() for branchname in branchlist.split('\n')]
+            branchlist = filter(lambda branchname:branchname, branchlist)
+        if branchlist and branch not in branchlist:
+            subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'branch', branch])
+        if branchlist:
+            subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'checkout', branch])
         subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'add', path])
         subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'commit', '-m', message])
 
@@ -232,12 +242,17 @@ class GitHubBrowserTests(TracGitHubTests):
     def testBadChangeset(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
             urllib2.urlopen(URL + 'changeset/1234567890')
-            urllib2.urlopen(URL + 'changeset/' + changeset + '/nosuchrepo/myfile')
 
     def testBadUrl(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
             urllib2.urlopen(URL + 'changesetnosuchurl')
-
+            
+    def testTimelineCommitFiltering(self):
+        content = urllib2.urlopen(URL+'timeline').read()
+        self.assertTrue('initial commit' in content)
+        self.assertTrue('hidden commit' not in content)
+        self.assertTrue('initial alt commit' in content)
+        
 
 class GitHubPostCommitHookTests(TracGitHubTests):
 
@@ -271,14 +286,8 @@ class GitHubPostCommitHookTests(TracGitHubTests):
                                          r"\* Adding commits [0-9a-f]{40}, [0-9a-f]{40}\n")
 
     def testCommitOnBranch(self):
-        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
-                'checkout', '-b', 'stable/1.0'], stderr=subprocess.PIPE)
-        self.makeGitCommit(ALTGIT, 'stable', 'stable branch\n')
-        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
-                'checkout', '-b', 'unstable'], stderr=subprocess.PIPE)
-        self.makeGitCommit(ALTGIT, 'unstable', 'unstable branch\n')
-        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
-                'checkout', 'master'], stderr=subprocess.PIPE)
+        self.makeGitCommit(ALTGIT, 'stable', 'stable branch\n', branch='stable/1.0')
+        self.makeGitCommit(ALTGIT, 'unstable', 'unstable branch\n', branch='unstable')
         output = self.openGitHubHook(2, 'alt').read()
         self.assertRegexpMatches(output, r"Running hook on alt\n"
                                          r"\* Updating clone\n"
