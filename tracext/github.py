@@ -10,6 +10,11 @@ from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManag
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
 from trac.web.api import IRequestHandler
 
+def allow_revision(rev, repos, allowed_branches):
+    rev_branches = repos.git.repo.branch('--contains', rev)
+    rev_branches = [l[2:] for l in rev_branches.splitlines()]
+    return any(fnmatch.fnmatchcase(rev_branch, branch) for rev_branch in rev_branches
+                    for branch in allowed_branches)
 
 class GitHubBrowser(ChangesetModule):
     implements(IRequestHandler)
@@ -54,6 +59,23 @@ class GitHubBrowser(ChangesetModule):
             url = 'https://github.com/%s/commit/%s' % (gh_repo, rev)
         req.redirect(url)
 
+    def get_timeline_events(self, req, start, stop, filters):
+        rm = RepositoryManager(self.env)
+        events = super(GitHubBrowser, self).get_timeline_events(req, start, stop, filters)
+        for event in events:
+            if event[0] != 'changeset':
+                yield event
+                continue
+            allow = True
+            for changeset in event[3][0]:
+                reponame = changeset[2][0]
+                repos = rm.get_repository(reponame)
+                key = 'branches' if is_default(reponame) else '%s.branches' % reponame
+                branches = self.config.getlist('github', key, sep=' ')
+                if branches:
+                    allow = allow and allow_revision(changeset[0].rev, repos, branches)
+            if allow:
+                yield event
 
 class GitHubPostCommitHook(Component):
     implements(IRequestHandler)
@@ -112,11 +134,7 @@ class GitHubPostCommitHook(Component):
         if branches:
             added_revs, skipped_revs = [], []
             for rev in revs:
-                rev_branches = repos.git.repo.branch('--contains', rev)
-                rev_branches = [l[2:] for l in rev_branches.splitlines()]
-                if any(fnmatch.fnmatchcase(rev_branch, branch)
-                        for rev_branch in rev_branches
-                        for branch in branches):
+                if allow_revision(rev, repos, branches):
                     added_revs.append(rev)
                 else:
                     skipped_revs.append(rev)
