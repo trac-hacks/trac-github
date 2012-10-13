@@ -46,6 +46,7 @@ CONF = '%s/conf/trac.ini' % ENV
 URL = 'http://localhost:8765/%s/' % ENV
 
 COVERAGE = False
+SHOW_LOG = False
 
 
 class HttpNoRedirectHandler(urllib2.HTTPRedirectHandler):
@@ -101,6 +102,7 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('components', 'trac.versioncontrol.web_ui.browser.BrowserModule', 'disabled')
         conf.set('components', 'trac.versioncontrol.web_ui.changeset.ChangesetModule', 'disabled')
         conf.set('components', 'trac.versioncontrol.web_ui.log.LogModule', 'disabled')
+        conf.set('components', 'trac.versioncontrol.svn_fs.*', 'disabled')      # avoid spurious log messages
         conf.set('components', 'tracext.git.*', 'enabled')
         conf.set('components', 'tracext.github.*', 'enabled')
         conf.set('components', 'tracopt.ticket.commit_updater.*', 'enabled')
@@ -109,6 +111,10 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('github', 'repository', 'aaugustin/trac-github')
         conf.set('github', 'alt.repository', 'follower/trac-github')
         conf.set('github', 'alt.branches', 'master stable/*')
+
+        if SHOW_LOG:
+            # The [logging] section already exists in the default trac.ini file.
+            conf.set('logging', 'log_type', 'stderr')
 
         conf.add_section('repositories')
         conf.set('repositories', '.dir', os.path.realpath('%s-mirror' % GIT))
@@ -374,4 +380,7 @@ if __name__ == '__main__':
     if '--with-coverage' in sys.argv:
         COVERAGE = True
         sys.argv.remove('--with-coverage')
+    if '--with-trac-log' in sys.argv:
+        SHOW_LOG = True
+        sys.argv.remove('--with-trac-log')
     unittest.main()
