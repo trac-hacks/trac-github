@@ -2,22 +2,6 @@
 
 """Functional tests for the Trac-GitHub plugin.
 
-To set up the testing environment, install these packages in a virtualenv:
-
-    $ pip install trac
-    $ pip install -e .
-    $ pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
-
-Then run the tests with:
-
-    $ ./runtests.py
-
-To run under coverage:
-
-    $ coverage erase
-    $ ./runtests.py --with-coverage
-    $ coverage html
-
 Trac's testing framework isn't well suited for plugins, so we NIH'd a bit.
 """
 

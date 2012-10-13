@@ -136,6 +136,32 @@ trac-github provides two components that you can enable separately.
   URLs of Trac, if you enable this pluign, you must disable three components in
   `trac.versioncontrol.web_ui`, as shown in the configuration file above.
 
+Development
+-----------
+
+In a [virtualenv](http://www.virtualenv.org/), install the requirements:
+
+    pip install trac
+    pip install coverage      # if you want to run the tests under coverage
+    pip install -e .
+
+Run the tests with:
+
+    ./runtests.py
+
+Display Trac's log during the tests with:
+
+    ./runtests.py --with-trac-log
+
+Run the tests under coverage with:
+
+    coverage erase
+    ./runtests.py --with-coverage
+    coverage html
+
+If you put a breakpoint in the test suite, you can interact with Trac's web
+interface at http://localhost:8765/ and with the git repositories.
+
 License
 -------
 
