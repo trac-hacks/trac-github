@@ -127,7 +127,7 @@ class TracGitHubTests(unittest.TestCase):
         else:
             tracd = ['tracd']
         cls.tracd = subprocess.Popen(tracd + ['--port', '8765', ENV],
-                stderr=subprocess.PIPE)
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         while True:
             try:
@@ -139,8 +139,6 @@ class TracGitHubTests(unittest.TestCase):
 
     @classmethod
     def stopTracd(cls):
-        print
-        print "Stopping server in PID %d." % cls.tracd.pid
         cls.tracd.send_signal(signal.SIGINT)
         cls.tracd.wait()
 
