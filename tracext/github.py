@@ -72,7 +72,7 @@ class GitHubBrowser(GitHubMixin, ChangesetModule):
             for cset, cset_resource, (reponame,) in viewable_changesets:
                 branches = self.get_branches(reponame)
                 repos = rm.get_repository(reponame)
-                if rev_in_branches(repos, cset.rev, branches):
+                if rev_in_branches(cset, branches):
                     filtered_changesets.append((cset, cset_resource, [reponame]))
             if filtered_changesets:
                 cset = filtered_changesets[-1][0]
@@ -134,7 +134,7 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         branches = self.get_branches(reponame)
         added_revs, skipped_revs = [], []
         for rev in revs:
-            if rev_in_branches(repos, rev, branches):
+            if rev_in_branches(repos.get_changeset(rev), branches):
                 added_revs.append(rev)
             else:
                 skipped_revs.append(rev)
@@ -153,13 +153,11 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         req.send(output.encode('utf-8'), 'text/plain', 200 if output else 204)
 
 
-def rev_in_branches(repos, rev, branches):
+def rev_in_branches(changeset, branches):
     if not branches:            # no branches filter configured
         return True
-    rev_branches = repos.git.repo.branch('--contains', rev)
-    rev_branches = [l[2:] for l in rev_branches.splitlines()]
-    return any(fnmatch.fnmatchcase(rev_branch, branch)
-        for rev_branch in rev_branches for branch in branches)
+    return any(fnmatch.fnmatchcase(cset_branch, branch)
+        for cset_branch, _ in changeset.get_branches() for branch in branches)
 
 
 def describe_commits(revs):
