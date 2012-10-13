@@ -124,21 +124,20 @@ class GitHubPostCommitHook(Component):
             added_revs, skipped_revs = revs, []
 
         if added_revs:
-            if len(added_revs) == 1:
-                output += u'* Adding commit %s\n' % added_revs[0]
-            else:
-                output += u'* Adding commits %s\n' % u', '.join(added_revs)
-
+            output += u'* Adding %s\n' % self.describe_commits(added_revs)
             # This is where Trac gets notified of the commits in the changeset
             rm.notify('changeset_added', reponame, added_revs)
 
         if skipped_revs:
-            if len(skipped_revs) == 1:
-                output += u'* Skipping commit %s\n' % skipped_revs[0]
-            else:
-                output += u'* Skipping commits %s\n' % u', '.join(skipped_revs)
+            output += u'* Skipping %s\n' % self.describe_commits(skipped_revs)
 
         for line in output.splitlines():
             self.log.debug(line)
 
         req.send(output.encode('utf-8'), 'text/plain', 200 if output else 204)
+
+    def describe_commits(self, revs):
+        if len(revs) == 1:
+            return u'commit %s' % revs[0]
+        else:
+            return u'commits %s' % u', '.join(revs)
