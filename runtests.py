@@ -232,7 +232,6 @@ class GitHubBrowserTests(TracGitHubTests):
     def testBadChangeset(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
             urllib2.urlopen(URL + 'changeset/1234567890')
-            urllib2.urlopen(URL + 'changeset/' + changeset + '/nosuchrepo/myfile')
 
     def testBadUrl(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
