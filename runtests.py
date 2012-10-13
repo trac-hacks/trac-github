@@ -126,8 +126,11 @@ class TracGitHubTests(unittest.TestCase):
 
         else:
             tracd = ['tracd']
-        cls.tracd = subprocess.Popen(tracd + ['--port', '8765', ENV],
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        if SHOW_LOG:
+            kwargs = {}
+        else:
+            kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        cls.tracd = subprocess.Popen(tracd + ['--port', '8765', ENV], **kwargs)
 
         while True:
             try:
