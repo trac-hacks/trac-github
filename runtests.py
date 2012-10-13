@@ -158,8 +158,8 @@ class TracGitHubTests(unittest.TestCase):
         repo = {'': GIT, 'alt': ALTGIT}[reponame]
 
         commits = []
-        log = subprocess.check_output(['git', '--git-dir=%s/.git' % repo,
-                'log', '-%d' % n, '--branches', '--format=oneline'])
+        log = subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'log',
+                '-%d' % n, '--branches', '--format=oneline', '--topo-order'])
         for line in log.splitlines():
             id, _, message = line.partition(' ')
             commits.append({'id': id, 'message': message})
