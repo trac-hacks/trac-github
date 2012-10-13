@@ -19,6 +19,7 @@ This feature set is comparable to https://github.com/davglass/github-trac.
 
 However trac-github has the following advantages:
 
+- it can watch only selected branches in each repository;
 - it supports multiple repositories;
 - it uses GitHub's generic WebHook URLs;
 - it has no external dependencies;
@@ -105,6 +106,8 @@ wildcards](http://docs.python.org/library/fnmatch):
     [github]
     branches = master stable/*
 
+This option also restricts which branches are shown in the timeline.
+
 Multiple repositories
 ---------------------
 
@@ -131,6 +134,7 @@ trac-github provides two components that you can enable separately.
   notifies components of the new changesets. Notifications are used by Trac's
   [commit ticket updater](http://trac.edgewall.org/wiki/CommitTicketUpdater)
   and [notifications](http://trac.edgewall.org/wiki/TracNotification).
+
 - **`tracext.github.GitHubBrowser`** replaces Trac's built-in browser by
   redirects to the corresponding pages on Github. Since it replaces standard
   URLs of Trac, if you enable this pluign, you must disable three components
@@ -150,8 +154,8 @@ or:
     pip install trac==0.12.4
     pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
 
-The version of PyGIT bundled with this plugin doesn't work with the `git`
-binary shipped with OS X. To fix it, in the virtualenv, edit
+The version of PyGIT bundled with `trac-git-plugin` doesn't work with the
+`git` binary shipped with OS X. To fix it, in the virtualenv, edit
 `src/tracgit/tracext/git/PyGIT.py` and replace
 `_, _, version = v.strip().split()` with `version = v.strip().split()[2]`.
 
@@ -170,7 +174,8 @@ Run the tests under coverage with:
     coverage html
 
 If you put a breakpoint in the test suite, you can interact with Trac's web
-interface at http://localhost:8765/ and with the git repositories.
+interface at [http://localhost:8765/](http://localhost:8765/) and with the git
+repositories through the command line.
 
 License
 -------
