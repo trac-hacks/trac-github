@@ -87,9 +87,10 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('components', 'trac.versioncontrol.web_ui.changeset.ChangesetModule', 'disabled')
         conf.set('components', 'trac.versioncontrol.web_ui.log.LogModule', 'disabled')
         conf.set('components', 'trac.versioncontrol.svn_fs.*', 'disabled')      # avoid spurious log messages
-        conf.set('components', 'tracext.git.*', 'enabled')
+        conf.set('components', 'tracext.git.*', 'enabled')                      # Trac 0.12.4
         conf.set('components', 'tracext.github.*', 'enabled')
         conf.set('components', 'tracopt.ticket.commit_updater.*', 'enabled')
+        conf.set('components', 'tracopt.versioncontrol.git.*', 'enabled')       # Trac 1.0
 
         conf.add_section('github')
         conf.set('github', 'repository', 'aaugustin/trac-github')

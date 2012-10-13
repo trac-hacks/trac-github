@@ -33,7 +33,7 @@ Requirements
 trac-github requires Trac >= 0.12 and the git plugin.
 
 This plugin [is included](http://trac.edgewall.org/wiki/TracGit) in Trac >=
-0.13 — you only have to enable it in `trac.ini`. For Trac 0.12 you have to
+1.0 — you only have to enable it in `trac.ini`. For Trac 0.12 you have to
 [install it](http://trac-hacks.org/wiki/GitPlugin):
 
     pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
@@ -133,8 +133,8 @@ trac-github provides two components that you can enable separately.
   and [notifications](http://trac.edgewall.org/wiki/TracNotification).
 - **`tracext.github.GitHubBrowser`** replaces Trac's built-in browser by
   redirects to the corresponding pages on Github. Since it replaces standard
-  URLs of Trac, if you enable this pluign, you must disable three components in
-  `trac.versioncontrol.web_ui`, as shown in the configuration file above.
+  URLs of Trac, if you enable this pluign, you must disable three components
+  in `trac.versioncontrol.web_ui`, as shown in the configuration file above.
 
 Development
 -----------
@@ -144,6 +144,16 @@ In a [virtualenv](http://www.virtualenv.org/), install the requirements:
     pip install trac
     pip install coverage      # if you want to run the tests under coverage
     pip install -e .
+
+or:
+
+    pip install trac==0.12.4
+    pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
+
+The version of PyGIT bundled with this plugin doesn't work with the `git`
+binary shipped with OS X. To fix it, in the virtualenv, edit
+`src/tracgit/tracext/git/PyGIT.py` and replace
+`_, _, version = v.strip().split()` with `version = v.strip().split()[2]`.
 
 Run the tests with:
 
