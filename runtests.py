@@ -146,12 +146,22 @@ class TracGitHubTests(unittest.TestCase):
         cls.tracd.wait()
 
     @staticmethod
-    def makeGitCommit(repo, path, content, message='edit'):
+    def makeGitBranch(repo, branch):
+        subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'branch', branch])
+
+    @staticmethod
+    def makeGitCommit(repo, path, content, message='edit', branch='master'):
+        if branch != 'master':
+            subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'checkout', branch],
+                    stderr=subprocess.PIPE)
         path = os.path.join(repo, path)
         with open(path, 'wb') as fp:
             fp.write(content)
         subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'add', path])
         subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'commit', '-m', message])
+        if branch != 'master':
+            subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'checkout', 'master'],
+                    stderr=subprocess.PIPE)
 
     @staticmethod
     def openGitHubHook(n=1, reponame=''):
@@ -229,6 +239,27 @@ class GitHubBrowserTests(TracGitHubTests):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
             urllib2.urlopen(URL + 'changesetnosuchurl')
 
+    def testTimelineFiltering(self):
+        self.makeGitBranch(GIT, 'stable/2.0')
+        self.makeGitBranch(GIT, 'unstable/2.0')
+        self.makeGitBranch(ALTGIT, 'stable/2.0')
+        self.makeGitBranch(ALTGIT, 'unstable/2.0')
+        self.makeGitCommit(GIT, 'myfile', 'timeline 1\n', 'msg 1')
+        self.makeGitCommit(GIT, 'myfile', 'timeline 2\n', 'msg 2', 'stable/2.0')
+        self.makeGitCommit(GIT, 'myfile', 'timeline 3\n', 'msg 3', 'unstable/2.0')
+        self.makeGitCommit(ALTGIT, 'myfile', 'timeline 4\n', 'msg 4')
+        self.makeGitCommit(ALTGIT, 'myfile', 'timeline 5\n', 'msg 5', 'stable/2.0')
+        self.makeGitCommit(ALTGIT, 'myfile', 'timeline 6\n', 'msg 6', 'unstable/2.0')
+        self.openGitHubHook(3)
+        self.openGitHubHook(3, 'alt')
+        html = urllib2.urlopen(URL + 'timeline').read()
+        self.assertTrue('msg 1' in html)
+        self.assertTrue('msg 2' in html)
+        self.assertTrue('msg 3' in html)
+        self.assertTrue('msg 4' in html)
+        self.assertTrue('msg 5' in html)
+        self.assertFalse('msg 6' in html)
+
 
 class GitHubPostCommitHookTests(TracGitHubTests):
 
@@ -262,14 +293,10 @@ class GitHubPostCommitHookTests(TracGitHubTests):
                                          r"\* Adding commits [0-9a-f]{40}, [0-9a-f]{40}\n")
 
     def testCommitOnBranch(self):
-        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
-                'checkout', '-b', 'stable/1.0'], stderr=subprocess.PIPE)
-        self.makeGitCommit(ALTGIT, 'stable', 'stable branch\n')
-        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
-                'checkout', '-b', 'unstable'], stderr=subprocess.PIPE)
-        self.makeGitCommit(ALTGIT, 'unstable', 'unstable branch\n')
-        subprocess.check_output(['git', '--git-dir=%s/.git' % ALTGIT,
-                'checkout', 'master'], stderr=subprocess.PIPE)
+        self.makeGitBranch(ALTGIT, 'stable/1.0')
+        self.makeGitCommit(ALTGIT, 'stable', 'stable branch\n', branch='stable/1.0')
+        self.makeGitBranch(ALTGIT, 'unstable/1.0')
+        self.makeGitCommit(ALTGIT, 'unstable', 'unstable branch\n', branch='unstable/1.0')
         output = self.openGitHubHook(2, 'alt').read()
         self.assertRegexpMatches(output, r"Running hook on alt\n"
                                          r"\* Updating clone\n"
