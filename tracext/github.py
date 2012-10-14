@@ -63,15 +63,12 @@ class GitHubBrowser(GitHubMixin, ChangesetModule):
     # ITimelineEventProvider methods
 
     def get_timeline_events(self, req, start, stop, filters):
-        rm = RepositoryManager(self.env)
-
         for event in super(GitHubBrowser, self).get_timeline_events(req, start, stop, filters):
             assert event[0] == 'changeset'
             viewable_changesets, show_location, show_files = event[3]
             filtered_changesets = []
             for cset, cset_resource, (reponame,) in viewable_changesets:
                 branches = self.get_branches(reponame)
-                repos = rm.get_repository(reponame)
                 if rev_in_branches(cset, branches):
                     filtered_changesets.append((cset, cset_resource, [reponame]))
             if filtered_changesets:
