@@ -122,7 +122,8 @@ class GitHubPostCommitHook(GitHubMixin, Component):
 
         try:
             payload = json.loads(req.args['payload'])
-            revs = [commit['id'] for commit in payload['commits']]
+            revs = [commit['id']
+                    for commit in payload['commits'] if commit['distinct']]
         except (ValueError, KeyError):
             msg = u'Invalid payload\n'
             self.log.warning(msg.rstrip('\n'))

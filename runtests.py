@@ -175,7 +175,7 @@ class TracGitHubTests(unittest.TestCase):
                 '-%d' % n, '--branches', '--format=oneline', '--topo-order'])
         for line in log.splitlines():
             id, _, message = line.partition(' ')
-            commits.append({'id': id, 'message': message})
+            commits.append({'id': id, 'message': message, 'distinct': True})
         payload = {'commits': commits}
         data = urllib.urlencode({'payload': json.dumps(payload)})
         return urllib2.urlopen(url, data=data)
