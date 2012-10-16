@@ -1,7 +1,7 @@
 from setuptools import setup
 
 setup(
-    name='GitHubPlugin',
+    name='trac-github',
     version='1.0',
     author='Aymeric Augustin',
     author_email='aymeric.augustin@m4x.org',
