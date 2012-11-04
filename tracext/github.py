@@ -4,10 +4,8 @@ import re
 
 from trac.config import ListOption, Option
 from trac.core import Component, implements
-from trac.resource import ResourceNotFound
 from trac.timeline.api import ITimelineEventProvider
-from trac.util.translation import _
-from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
+from trac.versioncontrol.api import is_default, RepositoryManager
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
 from trac.web.api import IRequestHandler
 
@@ -47,10 +45,7 @@ class GitHubBrowser(GitHubMixin, ChangesetModule):
         reponame, repos, path = rm.get_repository_by_path(path)
         gh_repo = self.get_gh_repo(reponame)
 
-        try:
-            rev = repos.normalize_rev(rev)
-        except NoSuchChangeset, e:
-            raise ResourceNotFound(e.message, _('Invalid Changeset Number'))
+        rev = repos.normalize_rev(rev)
 
         if path and path != '/':
             path = path.lstrip('/')
