@@ -113,7 +113,9 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         output = u'Running hook on %s\n' % (reponame or '(default)')
 
         output += u'* Updating clone\n'
-        output += repos.git.repo.remote('update', '--prune')
+        repos.git.repo.remote('update', '--prune')
+        output += u'* Synchronizing with clone\n'
+        repos.git.sync()
 
         try:
             payload = json.loads(req.args['payload'])

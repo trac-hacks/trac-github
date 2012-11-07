@@ -267,20 +267,20 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         output = self.openGitHubHook(0).read()
         self.assertEqual(output, "Running hook on (default)\n"
                                  "* Updating clone\n"
-                                 "Fetching origin\n")
+                                 "* Synchronizing with clone\n")
 
     def testAlternativeRepository(self):
         output = self.openGitHubHook(0, 'alt').read()
         self.assertEqual(output, "Running hook on alt\n"
                                  "* Updating clone\n"
-                                 "Fetching origin\n")
+                                 "* Synchronizing with clone\n")
 
     def testCommit(self):
         self.makeGitCommit(GIT, 'foo', 'foo content\n')
         output = self.openGitHubHook().read()
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
-                                         r"Fetching origin\n"
+                                         r"\* Synchronizing with clone\n"
                                          r"\* Adding commit [0-9a-f]{40}\n")
 
     def testMultipleCommits(self):
@@ -289,7 +289,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         output = self.openGitHubHook(2).read()
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
-                                         r"Fetching origin\n"
+                                         r"\* Synchronizing with clone\n"
                                          r"\* Adding commits [0-9a-f]{40}, [0-9a-f]{40}\n")
 
     def testCommitOnBranch(self):
@@ -300,7 +300,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         output = self.openGitHubHook(2, 'alt').read()
         self.assertRegexpMatches(output, r"Running hook on alt\n"
                                          r"\* Updating clone\n"
-                                         r"Fetching origin\n"
+                                         r"\* Synchronizing with clone\n"
                                          r"\* Adding commit [0-9a-f]{40}\n"
                                          r"\* Skipping commit [0-9a-f]{40}\n")
 
