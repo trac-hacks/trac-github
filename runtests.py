@@ -9,6 +9,7 @@ import ConfigParser
 import glob
 import json
 import os
+import random
 import shutil
 import signal
 import subprocess
@@ -18,8 +19,8 @@ import unittest
 import urllib
 import urllib2
 
-from trac.ticket.model import Ticket
 from trac.env import Environment
+from trac.ticket.model import Ticket
 
 
 GIT = 'test-git-foo'
@@ -303,6 +304,18 @@ class GitHubPostCommitHookTests(TracGitHubTests):
                                          r"\* Synchronizing with clone\n"
                                          r"\* Adding commit [0-9a-f]{40}\n"
                                          r"\* Skipping commit [0-9a-f]{40}\n")
+
+    def testUnknownCommit(self):
+        # Emulate self.openGitHubHook to use a non-existent commit id
+        url = URL + 'github'
+        random_id = ''.join(random.choice('0123456789abcdef') for _ in range(40))
+        payload = {'commits': [{'id': random_id, 'message': '', 'distinct': True}]}
+        data = urllib.urlencode({'payload': json.dumps(payload)})
+        output = urllib2.urlopen(url, data=data).read()
+        self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
+                                         r"\* Updating clone\n"
+                                         r"\* Synchronizing with clone\n"
+                                         r"\* Unknown commit [0-9a-f]{40}\n")
 
     def testNotification(self):
         env = Environment(ENV)

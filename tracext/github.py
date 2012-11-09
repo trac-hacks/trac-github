@@ -5,7 +5,7 @@ import re
 from trac.config import ListOption, Option
 from trac.core import Component, implements
 from trac.timeline.api import ITimelineEventProvider
-from trac.versioncontrol.api import is_default, RepositoryManager
+from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
 from trac.web.api import IRequestHandler
 
@@ -127,25 +127,40 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             req.send(msg.encode('utf-8'), 'text/plain', 400)
 
         branches = self.get_branches(reponame)
-        added_revs, skipped_revs = [], []
-        for rev in revs:
-            if rev_in_branches(repos.get_changeset(rev), branches):
-                added_revs.append(rev)
-            else:
-                skipped_revs.append(rev)
+        added, skipped, unknown = classify_commits(revs, repos, branches)
 
-        if added_revs:
-            output += u'* Adding %s\n' % describe_commits(added_revs)
+        if added:
+            output += u'* Adding %s\n' % describe_commits(added)
             # This is where Trac gets notified of the commits in the changeset
-            rm.notify('changeset_added', reponame, added_revs)
+            rm.notify('changeset_added', reponame, added)
 
-        if skipped_revs:
-            output += u'* Skipping %s\n' % describe_commits(skipped_revs)
+        if skipped:
+            output += u'* Skipping %s\n' % describe_commits(skipped)
+
+        if unknown:
+            output += u'* Unknown %s\n' % describe_commits(unknown)
+            self.log.error(u'Payload contains unknown %s',
+                    describe_commits(unknown))
 
         for line in output.splitlines():
             self.log.debug(line)
 
         req.send(output.encode('utf-8'), 'text/plain', 200 if output else 204)
+
+
+def classify_commits(revs, repos, branches):
+    added, skipped, unknown = [], [], []
+    for rev in revs:
+        try:
+            cset = repos.get_changeset(rev)
+        except NoSuchChangeset:
+            unknown.append(rev)
+        else:
+            if rev_in_branches(cset, branches):
+                added.append(rev)
+            else:
+                skipped.append(rev)
+    return added, skipped, unknown
 
 
 def rev_in_branches(changeset, branches):
