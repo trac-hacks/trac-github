@@ -24,8 +24,9 @@ However trac-github has the following advantages:
 - it uses GitHub's generic WebHook URLs;
 - it has no external dependencies;
 - it is well documented — more docs than code;
-- it has an extensive test suite — three times more tests than code;
+- it has an extensive test suite — twice more tests than code;
 - it has a much smaller codebase;
+- it has better logging;
 - it makes better use of Trac's APIs.
 
 Requirements
@@ -68,8 +69,8 @@ trac-github plugins:
     trac.versioncontrol.web_ui.browser.BrowserModule = disabled
     trac.versioncontrol.web_ui.changeset.ChangesetModule = disabled
     trac.versioncontrol.web_ui.log.LogModule = disabled
-    tracext.git.* = enabled
     tracext.github.* = enabled
+    tracopt.versioncontrol.git.* = enabled
 
     [github]
     repository = <user>/<project>
@@ -77,6 +78,9 @@ trac-github plugins:
     [trac]
     repository_dir = /home/trac/<project>.git
     repository_type = git
+
+In Trac 0.12, use `tracext.git.* = enabled` instead of
+`tracopt.versioncontrol.git.* = enabled`.
 
 Reload the web server and your project should appear in Trac.
 
@@ -92,10 +96,11 @@ under the form WebHook URLs setup form.
 Branches
 --------
 
-By default, trac-github notifies all the commits in each changeset to Trac.
-When you're merging a branch, the commits on the branch are notified again.
-This can result in duplicate ticket updates and notification emails. To avoid
-this, you can configure trac-github to only notify commits on some branches:
+By default, trac-github notifies all the commits to Trac. But you may not wish
+to trigger notifications for commits on experimental branches until they're
+merged, for example.
+
+You can configure trac-github to only notify commits on some branches:
 
     [github]
     branches = master
@@ -107,6 +112,9 @@ wildcards](http://docs.python.org/library/fnmatch):
     branches = master stable/*
 
 This option also restricts which branches are shown in the timeline.
+
+Besides, trac-github uses an undocumented feature of GitHub's WebHook to
+prevent duplicate notifications when you merge branches.
 
 Multiple repositories
 ---------------------
@@ -130,15 +138,19 @@ Advanced use
 trac-github provides two components that you can enable separately.
 
 - **`tracext.github.GitHubPostCommitHook`** is the post-commit hook called by
-  GitHub. It updates the git mirror used by Trac, triggers a cache update and
-  notifies components of the new changesets. Notifications are used by Trac's
-  [commit ticket updater](http://trac.edgewall.org/wiki/CommitTicketUpdater)
-  and [notifications](http://trac.edgewall.org/wiki/TracNotification).
+  GitHub.
+
+  It updates the git mirror used by Trac, triggers a cache update and notifies
+  components of the new changesets. Notifications are used by Trac's [commit
+  ticket updater](http://trac.edgewall.org/wiki/CommitTicketUpdater) and
+  [notifications](http://trac.edgewall.org/wiki/TracNotification).
 
 - **`tracext.github.GitHubBrowser`** replaces Trac's built-in browser by
-  redirects to the corresponding pages on Github. Since it replaces standard
-  URLs of Trac, if you enable this pluign, you must disable three components
-  in `trac.versioncontrol.web_ui`, as shown in the configuration file above.
+  redirects to the corresponding pages on Github.
+
+  Since it replaces standard URLs of Trac, if you enable this pluign, you must
+  disable three components in `trac.versioncontrol.web_ui`, as shown in the
+  configuration file above.
 
 Development
 -----------
@@ -154,10 +166,10 @@ or:
     pip install trac==0.12.4
     pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
 
-The version of PyGIT bundled with `trac-git-plugin` doesn't work with the
-`git` binary shipped with OS X. To fix it, in the virtualenv, edit
-`src/tracgit/tracext/git/PyGIT.py` and replace
-`_, _, version = v.strip().split()` with `version = v.strip().split()[2]`.
+*The version of PyGIT bundled with `trac-git-plugin` doesn't work with
+the `git` binary shipped with OS X. To fix it, in the virtualenv, edit
+`src/tracgit/tracext/git/PyGIT.py` and replace `_, _, version =
+v.strip().split()` with `version = v.strip().split()[2]`.*
 
 Run the tests with:
 
