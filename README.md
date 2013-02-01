@@ -90,8 +90,8 @@ tab, select WebHook URLs. Enter the URL of your Trac installation followed by
 
     http://<trac.example.com>/github
 
-You may want to restrict access this URL to GitHub's IPs. They're listed just
-under the form WebHook URLs setup form.
+You may want to restrict access to this URL to GitHub's IPs. They're listed
+just under the form WebHook URLs setup form.
 
 Branches
 --------
