@@ -193,13 +193,11 @@ repositories through the command line.
 Changelog
 ---------
 
-1.2
-~~~
+### 1.2
 
 * Add support for cached repositories.
 
-1.1
-~~~
+### 1.1
 
 * Add support for multiple repositories.
 * Add an option to restrict notifications to some branches.
@@ -207,8 +205,7 @@ Changelog
 * Use GitHub's generic WebHook URLs.
 * Use a git mirror instead of a bare clone.
 
-1.0
-~~~
+### 1.0
 
 * Public release.
 
