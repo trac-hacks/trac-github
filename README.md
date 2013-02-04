@@ -190,6 +190,28 @@ If you put a breakpoint in the test suite, you can interact with Trac's web
 interface at [http://localhost:8765/](http://localhost:8765/) and with the git
 repositories through the command line.
 
+Changelog
+---------
+
+1.2
+~~~
+
+* Add support for cached repositories.
+
+1.1
+~~~
+
+* Add support for multiple repositories.
+* Add an option to restrict notifications to some branches.
+* Try to avoid duplicate notifications (GitHub doesn't document the payload).
+* Use GitHub's generic WebHook URLs.
+* Use a git mirror instead of a bare clone.
+
+1.0
+~~~
+
+* Public release.
+
 License
 -------
 
