@@ -44,6 +44,8 @@ urllib2.install_opener(urllib2.build_opener(HttpNoRedirectHandler()))
 
 class TracGitHubTests(unittest.TestCase):
 
+    cached_git = False
+
     @classmethod
     def setUpClass(cls):
         cls.createGitRepositories()
@@ -94,6 +96,11 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('components', 'tracext.github.*', 'enabled')
         conf.set('components', 'tracopt.ticket.commit_updater.*', 'enabled')
         conf.set('components', 'tracopt.versioncontrol.git.*', 'enabled')       # Trac 1.0
+
+        if cls.cached_git:
+            conf.add_section('git')
+            conf.set('git', 'cached_repository', 'true')
+            conf.set('git', 'persistent_cache', 'true')
 
         conf.add_section('github')
         conf.set('github', 'repository', 'aaugustin/trac-github')
@@ -394,6 +401,18 @@ class GitHubPostCommitHookTests(TracGitHubTests):
     def testBadUrl(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
             urllib2.urlopen(URL + 'githubnosuchurl', data='')
+
+
+
+class GitHubBrowserWithCacheTests(GitHubBrowserTests):
+
+    cached_git = True
+
+
+
+class GitHubPostCommitHookWithCacheTests(GitHubPostCommitHookTests):
+
+    cached_git = True
 
 
 if __name__ == '__main__':

@@ -113,9 +113,15 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         output = u'Running hook on %s\n' % (reponame or '(default)')
 
         output += u'* Updating clone\n'
-        repos.git.repo.remote('update', '--prune')
+        try:
+            git = repos.git.repo             # GitRepository
+        except AttributeError:
+            git = repos.repos.git.repo       # GitCachedRepository
+        git.remote('update', '--prune')
+
+        # Ensure that repos.get_changeset can find the new changesets.
         output += u'* Synchronizing with clone\n'
-        repos.git.sync()
+        repos.sync()
 
         try:
             payload = json.loads(req.args['payload'])
