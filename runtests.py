@@ -49,9 +49,11 @@ class TracGitHubTests(unittest.TestCase):
         cls.createGitRepositories()
         cls.createTracEnvironment()
         cls.startTracd()
+        cls.env = Environment(ENV)
 
     @classmethod
     def tearDownClass(cls):
+        cls.env.shutdown()
         cls.stopTracd()
         cls.removeTracEnvironment()
         cls.removeGitRepositories()
@@ -318,14 +320,12 @@ class GitHubPostCommitHookTests(TracGitHubTests):
                                          r"\* Unknown commit [0-9a-f]{40}\n")
 
     def testNotification(self):
-        env = Environment(ENV)
-
-        ticket = Ticket(env)
+        ticket = Ticket(self.env)
         ticket['summary'] = 'I need a commit!'
         ticket['status'] = 'new'
         ticket_id = ticket.insert()
 
-        ticket = Ticket(env, ticket_id)
+        ticket = Ticket(self.env, ticket_id)
         self.assertEqual(ticket['status'], 'new')
         self.assertEqual(ticket['resolution'], '')
 
@@ -333,7 +333,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.makeGitCommit(GIT, 'newfile', 'with some new content', message)
         self.openGitHubHook()
 
-        ticket = Ticket(env, ticket_id)
+        ticket = Ticket(self.env, ticket_id)
         self.assertEqual(ticket['status'], 'closed')
         self.assertEqual(ticket['resolution'], 'fixed')
         changelog = ticket.get_changelog()
@@ -342,21 +342,19 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.assertIn("here you go", changelog[0][4])
 
     def testComplexNotification(self):
-        env = Environment(ENV)
-
-        ticket1 = Ticket(env)
+        ticket1 = Ticket(self.env)
         ticket1['summary'] = 'Fix please.'
         ticket1['status'] = 'new'
         ticket1_id = ticket1.insert()
-        ticket2 = Ticket(env)
+        ticket2 = Ticket(self.env)
         ticket2['summary'] = 'This one too, thanks.'
         ticket2['status'] = 'new'
         ticket2_id = ticket2.insert()
 
-        ticket1 = Ticket(env, ticket1_id)
+        ticket1 = Ticket(self.env, ticket1_id)
         self.assertEqual(ticket1['status'], 'new')
         self.assertEqual(ticket1['resolution'], '')
-        ticket2 = Ticket(env, ticket2_id)
+        ticket2 = Ticket(self.env, ticket2_id)
         self.assertEqual(ticket2['status'], 'new')
         self.assertEqual(ticket2['resolution'], '')
 
@@ -366,14 +364,14 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'newfile', 'with improved content', message2)
         self.openGitHubHook(2, 'alt')
 
-        ticket1 = Ticket(env, ticket1_id)
+        ticket1 = Ticket(self.env, ticket1_id)
         self.assertEqual(ticket1['status'], 'closed')
         self.assertEqual(ticket1['resolution'], 'fixed')
         changelog1 = ticket1.get_changelog()
         self.assertEqual(len(changelog1), 4)
         self.assertEqual(changelog1[0][2], 'comment')
         self.assertIn("you're welcome", changelog1[0][4])
-        ticket2 = Ticket(env, ticket2_id)
+        ticket2 = Ticket(self.env, ticket2_id)
         self.assertEqual(ticket2['status'], 'new')
         self.assertEqual(ticket2['resolution'], '')
         changelog2 = ticket2.get_changelog()
