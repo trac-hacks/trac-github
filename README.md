@@ -42,7 +42,7 @@ This plugin [is included](http://trac.edgewall.org/wiki/TracGit) in Trac >=
 
 Then install trac-github itself:
 
-    pip install -e git://github.com/aaugustin/trac-github.git#egg=TracGitHub-dev
+    pip install trac-github
 
 Setup
 -----
