@@ -82,17 +82,24 @@ trac-github plugins:
 In Trac 0.12, use `tracext.git.* = enabled` instead of
 `tracopt.versioncontrol.git.* = enabled`.
 
-Reload the web server and your project should appear in Trac.
+Reload the web server and your repository should appear in Trac.
 
-Now go to your project's administration page on GitHub. In the service hooks
-tab, select WebHook URLs. Enter the URL of your Trac installation followed by
-`github`, like this:
+Browse to the home page of your project in Trac and append `/github` to the
+URL. You should see the following message:
 
-    http://<trac.example.com>/github
+    Endpoint is ready to accept GitHub notifications.
 
-You might want to restrict access to this URL to GitHub's IPs. They're listed
-just under the WebHook URLs setup form. If you do so, be aware that the plugin
-will appear to fail randomly when GitHub adds a new IP to the list.
+This is the URL of the endpoint. Now go to your project's administration page
+on GitHub. In the service hooks tab, select WebHook URLs, and add the URL of
+the endpoint there.
+
+You might want to restrict access to the endpoint to GitHub's IPs. They're
+listed just under the WebHook URLs setup form. If you do so, be aware that the
+plugin will appear to fail randomly when GitHub adds a new IP to the list.
+
+If you get a Trac error page saying "No handler matched request to /github"
+instead, the plugin isn't installed properly. Make sure you've followed the
+installation instructions correctly and search Trac's logs for errors.
 
 Branches
 --------

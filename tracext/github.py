@@ -96,8 +96,8 @@ class GitHubPostCommitHook(GitHubMixin, Component):
 
     def process_request(self, req):
         if req.method != 'POST':
-            msg = u'Method not allowed (%s)\n' % req.method
-            self.log.warning(msg.rstrip('\n'))
+            msg = u'Endpoint is ready to accept GitHub notifications.\n'
+            self.log.warning(u'Method not allowed (%s)' % req.method)
             req.send(msg.encode('utf-8'), 'text/plain', 405)
 
         path = req.args['path']
