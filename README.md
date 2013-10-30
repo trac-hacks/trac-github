@@ -89,9 +89,9 @@ URL. You should see the following message:
 
     Endpoint is ready to accept GitHub notifications.
 
-This is the URL of the endpoint. Now go to your project's administration page
-on GitHub. In the service hooks tab, select WebHook URLs, and add the URL of
-the endpoint there.
+This is the URL of the endpoint. Now go to your project's settings page on
+GitHub. In the Service Hooks tab, select WebHook URLs, and add the URL of the
+endpoint there.
 
 You might want to restrict access to the endpoint to GitHub's IPs. They're
 listed just under the WebHook URLs setup form. If you do so, be aware that the
@@ -139,6 +139,57 @@ When you configure the WebHook URLs, append the name used by Trac to identify
 the repository:
 
     http://<trac.example.com>/github/<reponame>
+
+Private repositories
+--------------------
+
+If you're deploying trac-github on a private Trac instance to manage private
+repositories, you have to take a few extra steps to allow Trac to pull changes
+from GitHub. The trick is to have Trac authenticate with a SSH key referenced
+as a deployment key on GitHub.
+
+All the commands shown below must be run by the webserver's user, eg www-data:
+
+    $ su www-data
+
+Generate a dedicated SSH key with an empty passphrase and obtain the public
+key:
+
+    $ ssh-keygen -f ~/.ssh/id_rsa_trac
+    $ cat ~/.ssh/id_rsa_trac.pub
+
+Make sure you've obtained the public key (`.pub`). It should begin with
+`ssh-rsa`. If you're seeing an armored blob of data, it's the private key!
+
+Go to your project's settings page on GitHub. In the Deploy Keys tab, add the
+public key.
+
+Edit the SSH configuration for the `www-data` user:
+
+    $ vi ~/.ssh/config
+
+Append the following lines:
+
+    Host github-trac
+    Hostname github.com
+    IdentityFile ~/.ssh/id_rsa_trac
+
+Edit the git configuration for the repository:
+
+    $ cd /home/trac/<project>.git
+    $ vi config
+
+Replace `github.com` in the `url` parameter by the `Host` value you've added
+to the SSH configuration:
+
+    url = git@github-trac:<user>/<project>.git
+
+Make sure the authentication works:
+
+    $ git remote update --prune
+
+Since GitHub doesn't allow reusing SSH keys across repositories, you have to
+generate a new key and pick a new `Host` value for each new repository.
 
 Advanced use
 ------------
