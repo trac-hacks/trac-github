@@ -70,6 +70,7 @@ trac-github plugins:
     trac.versioncontrol.web_ui.changeset.ChangesetModule = disabled
     trac.versioncontrol.web_ui.log.LogModule = disabled
     tracext.github.* = enabled
+    tracopt.ticket.commit_updater.* = enabled
     tracopt.versioncontrol.git.* = enabled
 
     [github]
@@ -81,6 +82,10 @@ trac-github plugins:
 
 In Trac 0.12, use `tracext.git.* = enabled` instead of
 `tracopt.versioncontrol.git.* = enabled`.
+
+`tracopt.ticket.commit_updater.*` activates the [commit ticket
+updater](http://trac.edgewall.org/wiki/CommitTicketUpdater). It isn't
+required, but it's the most useful feature enabled by trac-github.
 
 Reload the web server and your repository should appear in Trac.
 
