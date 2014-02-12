@@ -16,7 +16,6 @@ import subprocess
 import sys
 import time
 import unittest
-import urllib
 import urllib2
 
 from trac.env import Environment
@@ -29,6 +28,7 @@ ALTGIT = 'test-git-bar'
 ENV = 'test-trac-github'
 CONF = '%s/conf/trac.ini' % ENV
 URL = 'http://localhost:8765/%s/' % ENV
+HEADERS = {'Content-Type': 'application/json', 'X-GitHub-Event': 'push'}
 
 COVERAGE = False
 SHOW_LOG = False
@@ -175,7 +175,7 @@ class TracGitHubTests(unittest.TestCase):
 
     @staticmethod
     def openGitHubHook(n=1, reponame=''):
-        # See https://help.github.com/articles/post-receive-hooks
+        # See https://developer.github.com/v3/activity/events/types/#pushevent
         # We don't reproduce the entire payload, only what the plugin needs.
         url = (URL + 'github/' + reponame) if reponame else URL + 'github'
         repo = {'': GIT, 'alt': ALTGIT}[reponame]
@@ -187,8 +187,8 @@ class TracGitHubTests(unittest.TestCase):
             id, _, message = line.partition(' ')
             commits.append({'id': id, 'message': message, 'distinct': True})
         payload = {'commits': commits}
-        data = urllib.urlencode({'payload': json.dumps(payload)})
-        return urllib2.urlopen(url, data=data)
+        request = urllib2.Request(url, json.dumps(payload), HEADERS)
+        return urllib2.urlopen(request)
 
 
 class GitHubBrowserTests(TracGitHubTests):
@@ -316,11 +316,10 @@ class GitHubPostCommitHookTests(TracGitHubTests):
 
     def testUnknownCommit(self):
         # Emulate self.openGitHubHook to use a non-existent commit id
-        url = URL + 'github'
         random_id = ''.join(random.choice('0123456789abcdef') for _ in range(40))
         payload = {'commits': [{'id': random_id, 'message': '', 'distinct': True}]}
-        data = urllib.urlencode({'payload': json.dumps(payload)})
-        output = urllib2.urlopen(url, data=data).read()
+        request = urllib2.Request(URL + 'github', json.dumps(payload), HEADERS)
+        output = urllib2.urlopen(request).read()
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
@@ -386,28 +385,42 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.assertEqual(changelog2[0][2], 'comment')
         self.assertIn("you bet", changelog2[0][4])
 
+    def testPing(self):
+        payload = {'zen': "Readability counts."}
+        headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'ping'}
+        request = urllib2.Request(URL + 'github', json.dumps(payload), headers)
+        output = urllib2.urlopen(request).read()
+        self.assertEqual(output, "Readability counts.")
+
+    def testUnknownEvent(self):
+        headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'pull'}
+        request = urllib2.Request(URL + 'github', json.dumps({}), headers)
+        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
+            urllib2.urlopen(request)
+
     def testBadMethod(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 405: Method Not Allowed$'):
             urllib2.urlopen(URL + 'github')
 
     def testBadPayload(self):
+        request = urllib2.Request(URL + 'github', 'foobar', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
-            urllib2.urlopen(URL + 'github', data='foobar')
+            urllib2.urlopen(request)
 
     def testBadRepository(self):
+        request = urllib2.Request(URL + 'github/nosuchrepo', '{}', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
-            urllib2.urlopen(URL + 'github/nosuchrepo', data='')
+            urllib2.urlopen(request)
 
     def testBadUrl(self):
+        request = urllib2.Request(URL + 'githubnosuchurl', '{}', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
-            urllib2.urlopen(URL + 'githubnosuchurl', data='')
-
+            urllib2.urlopen(request)
 
 
 class GitHubBrowserWithCacheTests(GitHubBrowserTests):
 
     cached_git = True
-
 
 
 class GitHubPostCommitHookWithCacheTests(GitHubPostCommitHookTests):

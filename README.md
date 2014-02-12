@@ -21,10 +21,10 @@ However trac-github has the following advantages:
 
 - it can watch only selected branches in each repository;
 - it supports multiple repositories;
-- it uses GitHub's generic WebHook URLs;
+- it uses GitHub's new Webhooks, introduced in February 2014;
 - it has no external dependencies;
 - it is well documented — more docs than code;
-- it has an extensive test suite — twice more tests than code;
+- it is fully tested — twice more tests than code;
 - it has a much smaller codebase;
 - it has better logging;
 - it makes better use of Trac's APIs.
@@ -94,17 +94,19 @@ URL. You should see the following message:
 
     Endpoint is ready to accept GitHub notifications.
 
-This is the URL of the endpoint. Now go to your project's settings page on
-GitHub. In the Service Hooks tab, select WebHook URLs, and add the URL of the
-endpoint there.
-
-You might want to restrict access to the endpoint to GitHub's IPs. They're
-listed just under the WebHook URLs setup form. If you do so, be aware that the
-plugin will appear to fail randomly when GitHub adds a new IP to the list.
+This is the URL of the endpoint.
 
 If you get a Trac error page saying "No handler matched request to /github"
 instead, the plugin isn't installed properly. Make sure you've followed the
 installation instructions correctly and search Trac's logs for errors.
+
+Now go to your project's settings page on GitHub. In the "Webhooks & Services"
+tab, click "Add webhook". Put the URL of the endpoint in the "Payload URL"
+field and set the "Payload version" to application/vnd.github.v3+json. Then
+click "Add webhook".
+
+If you click on the webhook you just created, at the bottom of the page, you
+should see that a "ping" payload was successufully delivered to Trac
 
 Branches
 --------
@@ -255,6 +257,13 @@ repositories through the command line.
 
 Changelog
 ---------
+
+### 2.0
+
+* Adapt to GitHub's new Webhooks.
+
+When you upgrade from 1.x, you must change your Webhooks settings on GitHub to
+use the application/vnd.github.v3+json format.
 
 ### 1.2
 

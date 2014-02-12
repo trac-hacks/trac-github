@@ -86,12 +86,6 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         match = self._request_re.match(req.path_info)
         if match:
             req.args['path'] = match.group(1) or '/'
-            # GitHub wraps the JSON payload in an urlencoded body and sends a
-            # Content-Type: application/x-www-form-urlencoded header.
-            # Unfortunately this triggers Trac's CSRF protection. Disable it.
-            headers = [h for h in req._inheaders if h[0] != 'content-type']
-            headers.append(('content-type', 'application/json'))
-            req._inheaders = headers
             return True
 
     def process_request(self, req):
@@ -99,6 +93,15 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             msg = u'Endpoint is ready to accept GitHub notifications.\n'
             self.log.warning(u'Method not allowed (%s)' % req.method)
             req.send(msg.encode('utf-8'), 'text/plain', 405)
+
+        event = req.get_header('X-GitHub-Event')
+        if event == 'ping':
+            payload = json.loads(req.read())
+            req.send(payload['zen'].encode('utf-8'), 'text/plain', 200)
+        elif event != 'push':
+            msg = u'Only ping and push are supported\n'
+            self.log.warning(msg.rstrip('\n'))
+            req.send(msg.encode('utf-8'), 'text/plain', 400)
 
         path = req.args['path']
 
@@ -124,7 +127,7 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         repos.sync()
 
         try:
-            payload = json.loads(req.args['payload'])
+            payload = json.loads(req.read())
             revs = [commit['id']
                     for commit in payload['commits'] if commit['distinct']]
         except (ValueError, KeyError):
