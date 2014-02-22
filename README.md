@@ -21,7 +21,7 @@ However trac-github has the following advantages:
 
 - it can watch only selected branches in each repository;
 - it supports multiple repositories;
-- it uses GitHub's new Webhooks, introduced in February 2014;
+- it uses GitHub's new webhooks, introduced in February 2014;
 - it has no external dependencies;
 - it is well documented — more docs than code;
 - it is fully tested — twice more tests than code;
@@ -128,7 +128,7 @@ wildcards](http://docs.python.org/library/fnmatch):
 
 This option also restricts which branches are shown in the timeline.
 
-Besides, trac-github uses an undocumented feature of GitHub's WebHook to
+Besides, trac-github uses relies on the 'distinct' flag set by GitHub to
 prevent duplicate notifications when you merge branches.
 
 Multiple repositories
@@ -142,7 +142,7 @@ GitHub:
     <reponame>.repository = <user>/<project>    # for each extra repository
     <reponame>.branches = <branches>            # optional
 
-When you configure the WebHook URLs, append the name used by Trac to identify
+When you configure the webhook URLs, append the name used by Trac to identify
 the repository:
 
     http://<trac.example.com>/github/<reponame>
@@ -260,9 +260,9 @@ Changelog
 
 ### 2.0
 
-* Adapt to GitHub's new Webhooks.
+* Adapt to GitHub's new webhooks.
 
-When you upgrade from 1.x, you must change your Webhooks settings on GitHub to
+When you upgrade from 1.x, you must change your webhooks settings on GitHub to
 use the application/vnd.github.v3+json format.
 
 ### 1.2
@@ -274,7 +274,7 @@ use the application/vnd.github.v3+json format.
 * Add support for multiple repositories.
 * Add an option to restrict notifications to some branches.
 * Try to avoid duplicate notifications (GitHub doesn't document the payload).
-* Use GitHub's generic WebHook URLs.
+* Use GitHub's generic webhook URLs.
 * Use a git mirror instead of a bare clone.
 
 ### 1.0
