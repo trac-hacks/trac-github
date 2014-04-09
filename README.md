@@ -255,6 +255,34 @@ If you put a breakpoint in the test suite, you can interact with Trac's web
 interface at [http://localhost:8765/](http://localhost:8765/) and with the git
 repositories through the command line.
 
+Known issues
+------------
+
+Once in a while, a notification doesn't appear in Trac.
+
+Usually, that happens when Trac fails to find the commit that triggered the
+notification, even though it just synchronized the git repository with GitHub.
+
+You can confirm that in your webhook's configuration page on GitHub. Scroll
+down to "Recent Deliveries" and look at the delivery that failed. In the
+"Response" tab, you should see a response body such as:
+
+    Running hook on (default)
+    * Updating clone
+    * Synchronizing with clone
+    * Unknown commit ...
+
+Simply click "Redeliver". Then missing notification should appear in Trac and
+the response body should change to:
+
+    Running hook on (default)
+    * Updating clone
+    * Synchronizing with clone
+    * Adding commit ...
+
+This problem isn't well understood. It may be related to Trac's access layer
+for git repositories. If you have an idea to fix it, please submit a patch!
+
 Changelog
 ---------
 
