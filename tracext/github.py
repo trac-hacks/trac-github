@@ -4,7 +4,6 @@ import re
 
 from trac.config import ListOption, Option
 from trac.core import Component, implements
-from trac.timeline.api import ITimelineEventProvider
 from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
 from trac.web.api import IRequestHandler
@@ -22,7 +21,6 @@ class GitHubMixin(object):
 
 
 class GitHubBrowser(GitHubMixin, ChangesetModule):
-    implements(IRequestHandler, ITimelineEventProvider)
 
     repository = Option('github', 'repository', '',
             doc="Repository name on GitHub (<user>/<project>)")
