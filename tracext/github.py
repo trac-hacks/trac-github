@@ -1,12 +1,96 @@
 import fnmatch
 import json
+import os
 import re
+
+from genshi.builder import tag
 
 from trac.config import ListOption, Option
 from trac.core import Component, implements
+from trac.util.translation import _
 from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
 from trac.web.api import IRequestHandler
+from trac.web.auth import LoginModule
+
+
+class GitHubLoginModule(LoginModule):
+
+    # INavigationContributor methods
+
+    def get_active_navigation_item(self, req):
+        return 'github_login'
+
+    def get_navigation_items(self, req):
+        if req.authname and req.authname != 'anonymous':
+            # Use the same names as LoginModule to avoid duplicates.
+            yield ('metanav', 'login', _('logged in as %(user)s',
+                                         user=req.authname))
+            yield ('metanav', 'logout',
+                   tag.a(_('Logout'), href=req.href.github('logout')))
+        else:
+            # Use a different name from LoginModule to allow both in parallel.
+            yield ('metanav', 'github_login',
+                   tag.a(_('GitHub Login'), href=req.href.github('login')))
+
+    # IRequestHandler methods
+
+    def match_request(self, req):
+        return re.match('/github/(login|oauth|logout)/?$', req.path_info)
+
+    def process_request(self, req):
+        if req.path_info.startswith('/github/login'):
+            self._do_login(req)
+        elif req.path_info.startswith('/github/oauth'):
+            self._do_oauth(req)
+        elif req.path_info.startswith('/github/logout'):
+            self._do_logout(req)
+        self._redirect_back(req)
+
+    # Internal methods
+
+    def _do_login(self, req):
+        oauth = self._oauth_session(req)
+        authorization_url, state = oauth.authorization_url(
+            'https://github.com/login/oauth/authorize')
+        req.session['oauth_state'] = state
+        req.redirect(authorization_url)
+
+    def _do_oauth(self, req):
+        oauth = self._oauth_session(req)
+        authorization_response = req.abs_href(req.path_info) + '?' + req.query_string
+        client_secret = self._client_config('secret')
+        oauth.fetch_token(
+            'https://github.com/login/oauth/access_token',
+            authorization_response=authorization_response,
+            client_secret=client_secret)
+
+        user = oauth.get('https://api.github.com/user').json()
+        # Small hack to pass the username to _do_login.
+        req.environ['REMOTE_USER'] = user['login']
+        # Save other available values in the session.
+        req.session['name'] = user.get('name', '')
+        req.session['email'] = user.get('email', '')
+
+        return super(GitHubLoginModule, self)._do_login(req)
+
+    def _oauth_session(self, req):
+        client_id = self._client_config('id')
+        redirect_uri = req.abs_href.github('oauth')
+        # Inner import to avoid a hard dependency on requests-oauthlib.
+        from requests_oauthlib import OAuth2Session
+        return OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[])
+
+    def _client_config(self, key):
+        assert key in ('id', 'secret')
+        value = self.config.get('github', 'client_' + key)
+        if re.match('[0-9a-f]+', value):
+            return value
+        elif value.isupper():
+            return os.environ.get(value, '')
+        else:
+            with open(value) as f:
+                return f.read.strip()
 
 
 class GitHubMixin(object):
