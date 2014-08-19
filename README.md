@@ -15,20 +15,6 @@ described in Trac's setup guide:
 
     trac-admin TRAC_ENV changeset added ...
 
-This feature set is comparable to https://github.com/davglass/github-trac.
-
-However trac-github has the following advantages:
-
-- it can watch only selected branches in each repository;
-- it supports multiple repositories;
-- it uses GitHub's new webhooks, introduced in February 2014;
-- it has no external dependencies;
-- it is well documented — more docs than code;
-- it is fully tested — twice more tests than code;
-- it has a much smaller codebase;
-- it has better logging;
-- it makes better use of Trac's APIs.
-
 Requirements
 ------------
 
