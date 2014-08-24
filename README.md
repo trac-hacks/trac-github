@@ -4,16 +4,20 @@ Trac - GitHub integration
 Features
 --------
 
-This Trac plugin performs two functions:
+This Trac plugin performs three functions:
 
-- update the local git mirror used by Trac after each push to GitHub, and
-  notify the new changesets to Trac;
-- replace Trac's built-in browser by GitHub's (optional).
+1. update the local git mirror used by Trac after each push to GitHub, and
+   notify the new changesets to Trac;
+2. authenticate users with their GitHub account;
+3. replace Trac's built-in browser by GitHub's.
 
 The notification of new changesets is strictly equivalent to the command
 described in Trac's setup guide:
 
     trac-admin TRAC_ENV changeset added ...
+
+Each feature is implemented in its own component and can be enabled or
+disabled (almost) independently.
 
 Requirements
 ------------
@@ -36,6 +40,16 @@ Setup
 _Warning: the commands below are provided for illustrative purposes. You'll
 have to adapt them to your setup._
 
+### Post-commit hook
+
+**`tracext.github.GitHubPostCommitHook`** implements a post-commit hook called
+by GitHub after each push.
+
+It updates the git mirror used by Trac, triggers a cache update and notifies
+components of the new changesets. Notifications are used by Trac's [commit
+ticket updater](http://trac.edgewall.org/wiki/CommitTicketUpdater) and
+[notifications](http://trac.edgewall.org/wiki/TracNotification).
+
 First, you need a mirror of your GitHub repository, writable by the webserver,
 for Trac's use:
 
@@ -52,10 +66,7 @@ Now edit your `trac.ini` as follows to configure both the git and the
 trac-github plugins:
 
     [components]
-    trac.versioncontrol.web_ui.browser.BrowserModule = disabled
-    trac.versioncontrol.web_ui.changeset.ChangesetModule = disabled
-    trac.versioncontrol.web_ui.log.LogModule = disabled
-    tracext.github.* = enabled
+    tracext.github.GitHubPostCommitHook = enabled
     tracopt.ticket.commit_updater.* = enabled
     tracopt.versioncontrol.git.* = enabled
 
@@ -94,10 +105,71 @@ click "Add webhook".
 If you click on the webhook you just created, at the bottom of the page, you
 should see that a "ping" payload was successufully delivered to Trac
 
-Branches
---------
+### Authentication
 
-By default, trac-github notifies all the commits to Trac. But you may not wish
+**`tracext.github.GitHubLoginModule`** provides authentication through
+GitHub's OAuth API. It obtains users' names and email addresses after a
+successful login if they're public and saves them in the preferences.
+
+To use this module, your Trac instance must be served over HTTPS. This is a
+requirement of the OAuth2 standard.
+
+Go to your accounts's settings page on GitHub. In the "Application" tab, click
+"Register new application" and fill in the form. The "Authorization callback
+URL", put the URL of the homepage of your project in Trac, starting with
+`https://`, and append `/github/oauth`. In other words, this is the URL of the
+endpoint you used above plus `/oauth`. Then click "Register application".
+
+You're redirected to your newly created application's page, which provides a
+Client ID and a Client Secret.
+
+Now edit edit `trac.ini` as follows:
+
+    [components]
+    trac.web.auth.LoginModule = disabled
+    tracext.github.GitHubLoginModule = enabled
+
+    [github]
+    client_id = <your Client ID>
+    client_secret = <your Client Secret>
+
+This example disables `trac.web.auth.LoginModule`. Otherwise different users
+could authenticate with the same username through different systems!
+
+If it's impractical to set the Client ID and Client Secret in the Trac
+configuration file, you have some alternatives:
+
+- If `client_secret` is an hexadecimal value, trac-github will use it as is.
+- If `client_secret` is an uppercase value, trac-github will use the content
+  of the corresponding environment variable as client secret.
+- If `client_secret` is anything else, trac-github will interpret it as a file
+  name and use the contents of that file as client secret.
+
+This module appends a `github_login` link to Trac's `metanav`.
+
+### Browser
+
+**`tracext.github.GitHubBrowser`** replaces Trac's built-in browser by
+redirecting to the corresponding pages on GitHub. It depends on the
+post-commit hook.
+
+To enable it, edit `trac.ini` as follows:
+
+    [components]
+    trac.versioncontrol.web_ui.browser.BrowserModule = disabled
+    trac.versioncontrol.web_ui.changeset.ChangesetModule = disabled
+    trac.versioncontrol.web_ui.log.LogModule = disabled
+    tracext.github.GitHubBrowser = enabled
+
+Since it replaces standard URLs of Trac, you must disable three components in
+`trac.versioncontrol.web_ui`, as shown above.
+
+Advanced setup
+--------------
+
+### Branches
+
+By default, trac-github notifies all commits to Trac. But you may not wish
 to trigger notifications for commits on experimental branches until they're
 merged, for example.
 
@@ -117,8 +189,7 @@ This option also restricts which branches are shown in the timeline.
 Besides, trac-github uses relies on the 'distinct' flag set by GitHub to
 prevent duplicate notifications when you merge branches.
 
-Multiple repositories
----------------------
+### Multiple repositories
 
 If you have multiple repositories, you must tell Trac how they're called on
 GitHub:
@@ -133,8 +204,7 @@ the repository:
 
     http://<trac.example.com>/github/<reponame>
 
-Private repositories
---------------------
+### Private repositories
 
 If you're deploying trac-github on a private Trac instance to manage private
 repositories, you have to take a few extra steps to allow Trac to pull changes
@@ -184,26 +254,6 @@ Make sure the authentication works:
 Since GitHub doesn't allow reusing SSH keys across repositories, you have to
 generate a new key and pick a new `Host` value for each new repository.
 
-Advanced use
-------------
-
-trac-github provides two components that you can enable separately.
-
-- **`tracext.github.GitHubPostCommitHook`** is the post-commit hook called by
-  GitHub.
-
-  It updates the git mirror used by Trac, triggers a cache update and notifies
-  components of the new changesets. Notifications are used by Trac's [commit
-  ticket updater](http://trac.edgewall.org/wiki/CommitTicketUpdater) and
-  [notifications](http://trac.edgewall.org/wiki/TracNotification).
-
-- **`tracext.github.GitHubBrowser`** replaces Trac's built-in browser by
-  redirects to the corresponding pages on Github.
-
-  Since it replaces standard URLs of Trac, if you enable this pluign, you must
-  disable three components in `trac.versioncontrol.web_ui`, as shown in the
-  configuration file above.
-
 Development
 -----------
 
@@ -213,7 +263,7 @@ In a [virtualenv](http://www.virtualenv.org/), install the requirements:
     pip install coverage      # if you want to run the tests under coverage
     pip install -e .
 
-or:
+or, instead of `pip install trac`:
 
     pip install trac==0.12.4
     pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
@@ -271,6 +321,10 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 
 Changelog
 ---------
+
+### 2.1
+
+* Add support for GitHub login.
 
 ### 2.0
 
