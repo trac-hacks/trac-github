@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='trac-github',
-    version='2.1.0',
+    version='2.1.1',
     author='Aymeric Augustin',
     author_email='aymeric.augustin@m4x.org',
     url='https://github.com/aaugustin/trac-github',
