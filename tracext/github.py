@@ -69,8 +69,8 @@ class GitHubLoginModule(LoginModule):
         # Small hack to pass the username to _do_login.
         req.environ['REMOTE_USER'] = user['login']
         # Save other available values in the session.
-        req.session.setdefault('name', user.get('name', ''))
-        req.session.setdefault('email', user.get('email', ''))
+        req.session.setdefault('name', user.get('name') or '')
+        req.session.setdefault('email', user.get('email') or '')
 
         return super(GitHubLoginModule, self)._do_login(req)
 
