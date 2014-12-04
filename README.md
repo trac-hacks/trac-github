@@ -22,9 +22,9 @@ disabled (almost) independently.
 Requirements
 ------------
 
-trac-github requires Trac >= 0.12 and the git plugin.
+trac-github requires Trac >= 0.12 and the *git plugin*.
 
-This plugin [is included](http://trac.edgewall.org/wiki/TracGit) in Trac >=
+The *git plugin* [is included](http://trac.edgewall.org/wiki/TracGit) in Trac >=
 1.0 — you only have to enable it in `trac.ini`. For Trac 0.12 you have to
 [install it](http://trac-hacks.org/wiki/GitPlugin):
 
