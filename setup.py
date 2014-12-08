@@ -9,6 +9,7 @@ setup(
     description='Trac - GitHub integration',
     download_url='http://pypi.python.org/pypi/trac-github',
     packages=['tracext'],
+    namespace_packages=['tracext'],
     platforms='all',
     license='BSD',
     entry_points={'trac.plugins': ['github = tracext.github']},
