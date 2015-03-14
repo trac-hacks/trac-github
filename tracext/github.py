@@ -171,6 +171,16 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             return True
 
     def process_request(self, req):
+        path = req.args['path']
+
+        rm = RepositoryManager(self.env)
+        reponame, repos, path = rm.get_repository_by_path(path)
+
+        if repos is None or path != '/':
+            msg = u'No such repository (%s)\n' % path
+            self.log.warning(msg.rstrip('\n'))
+            req.send(msg.encode('utf-8'), 'text/plain', 400)
+
         if req.method != 'POST':
             msg = u'Endpoint is ready to accept GitHub notifications.\n'
             self.log.warning(u'Method not allowed (%s)' % req.method)
@@ -182,16 +192,6 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             req.send(payload['zen'].encode('utf-8'), 'text/plain', 200)
         elif event != 'push':
             msg = u'Only ping and push are supported\n'
-            self.log.warning(msg.rstrip('\n'))
-            req.send(msg.encode('utf-8'), 'text/plain', 400)
-
-        path = req.args['path']
-
-        rm = RepositoryManager(self.env)
-        reponame, repos, path = rm.get_repository_by_path(path)
-
-        if repos is None or path != '/':
-            msg = u'No such repository (%s)\n' % path
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
 
