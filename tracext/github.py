@@ -190,7 +190,7 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         rm = RepositoryManager(self.env)
         reponame, repos, path = rm.get_repository_by_path(path)
 
-        if path != '/':
+        if repos is None or path != '/':
             msg = u'No such repository (%s)\n' % path
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
