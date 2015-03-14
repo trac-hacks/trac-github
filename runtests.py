@@ -66,8 +66,8 @@ class TracGitHubTests(unittest.TestCase):
         subprocess.check_output(['git', 'init', ALTGIT])
         cls.makeGitCommit(GIT, 'README', 'default git repository\n')
         cls.makeGitCommit(ALTGIT, 'README', 'alternative git repository\n')
-        subprocess.check_output(['git', 'clone', '--mirror', GIT, '%s-mirror' % GIT])
-        subprocess.check_output(['git', 'clone', '--mirror', ALTGIT, '%s-mirror' % ALTGIT])
+        subprocess.check_output(['git', 'clone', '--quiet', '--mirror', GIT, '%s-mirror' % GIT])
+        subprocess.check_output(['git', 'clone', '--quiet', '--mirror', ALTGIT, '%s-mirror' % ALTGIT])
 
     @classmethod
     def removeGitRepositories(cls):
