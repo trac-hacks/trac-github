@@ -1,4 +1,6 @@
 import fnmatch
+from hashlib import sha1
+import hmac
 import json
 import os
 import re
@@ -14,7 +16,40 @@ from trac.web.api import IRequestHandler
 from trac.web.auth import LoginModule
 
 
-class GitHubLoginModule(LoginModule):
+class GitHubMixin(object):
+
+    def get_gh_repo(self, reponame):
+        key = 'repository' if is_default(reponame) else '%s.repository' % reponame
+        return self.config.get('github', key)
+
+    def get_branches(self, reponame):
+        key = 'branches' if is_default(reponame) else '%s.branches' % reponame
+        return self.config.getlist('github', key, sep=' ')
+
+    def _config(self, key):
+        assert key in ('client_id', 'client_secret', 'hook_secret')
+        value = self.config.get('github', key)
+        if re.match('[0-9a-f]+', value):
+            return value
+        elif value.isupper():
+            return os.environ.get(value, '')
+        else:
+            with open(value) as f:
+                return f.read.strip()
+
+    def verify_signature(self, req):
+        full_signature = req.get_header('X-Hub-Signature')
+        if not full_signature or not full_signature.find('='):
+            return False
+        sha_name, signature = req.get_header('X-Hub-Signature').split('=')
+        if sha_name != 'sha1':
+            return False
+        hook_secret = str(self._config('hook_secret'))
+        mac = hmac.new(hook_secret, msg = str(req.read()), digestmod = sha1)
+        return hmac.compare_digest(mac.hexdigest(), signature)
+
+
+class GitHubLoginModule(GitHubMixin, LoginModule):
 
     # INavigationContributor methods
 
@@ -59,7 +94,7 @@ class GitHubLoginModule(LoginModule):
     def _do_oauth(self, req):
         oauth = self._oauth_session(req)
         authorization_response = req.abs_href(req.path_info) + '?' + req.query_string
-        client_secret = self._client_config('secret')
+        client_secret = self._config('client_secret')
         oauth.fetch_token(
             'https://github.com/login/oauth/access_token',
             authorization_response=authorization_response,
@@ -75,33 +110,11 @@ class GitHubLoginModule(LoginModule):
         return super(GitHubLoginModule, self)._do_login(req)
 
     def _oauth_session(self, req):
-        client_id = self._client_config('id')
+        client_id = self._config('client_id')
         redirect_uri = req.abs_href.github('oauth')
         # Inner import to avoid a hard dependency on requests-oauthlib.
         from requests_oauthlib import OAuth2Session
         return OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[])
-
-    def _client_config(self, key):
-        assert key in ('id', 'secret')
-        value = self.config.get('github', 'client_' + key)
-        if re.match('[0-9a-f]+', value):
-            return value
-        elif value.isupper():
-            return os.environ.get(value, '')
-        else:
-            with open(value) as f:
-                return f.read.strip()
-
-
-class GitHubMixin(object):
-
-    def get_gh_repo(self, reponame):
-        key = 'repository' if is_default(reponame) else '%s.repository' % reponame
-        return self.config.get('github', key)
-
-    def get_branches(self, reponame):
-        key = 'branches' if is_default(reponame) else '%s.branches' % reponame
-        return self.config.getlist('github', key, sep=' ')
 
 
 class GitHubBrowser(GitHubMixin, ChangesetModule):
@@ -266,3 +279,35 @@ def describe_commits(revs):
         return u'commit %s' % revs[0]
     else:
         return u'commits %s' % u', '.join(revs)
+
+
+class GitHubIssueHook(GitHubMixin, Component):
+    implements(IRequestHandler)
+
+    _request_re = re.compile(r"/github-issues/?$")
+
+    # IRequestHandler method
+    def match_request(self, req):
+        match = self._request_re.match(req.path_info)
+        if match:
+            return True
+
+    # IRequestHandler method
+    def process_request(self, req):
+        if not self.verify_signature(req):
+            msg = u'Invalid hook signature from %s, ignoring request.\n' % req.remote_addr
+            self.log.warning(msg.rstrip('\n'))
+            req.send(msg.encode('utf-8'), 'text/plain', 400)
+
+        event = req.get_header('X-GitHub-Event')
+        if event == 'ping':
+            payload = json.loads(req.read())
+            req.send(payload['zen'].encode('utf-8'), 'text/plain', 200)
+            return
+        if event not in ['issue_comment', 'issues', 'pull_request', 'pull_request_review_comment']:
+            msg = u'Unsupported event recieved (%s), ignoring request.\n' % event
+            self.log.warning(msg.rstrip('\n'))
+            req.send(msg.encode('utf-8'), 'text/plain', 400)
+            return
+
+        req.send(u'Running %s hook:' % event, 'text/plain', 200)
