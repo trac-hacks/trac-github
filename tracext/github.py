@@ -4,11 +4,14 @@ import hmac
 import json
 import os
 import re
+import urllib2
 
 from genshi.builder import tag
 
+from trac.attachment import Attachment
 from trac.config import ListOption, Option
 from trac.core import Component, implements
+from trac.ticket.model import Ticket
 from trac.util.translation import _
 from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
@@ -37,15 +40,15 @@ class GitHubMixin(object):
             with open(value) as f:
                 return f.read.strip()
 
-    def verify_signature(self, req):
+    def verify_signature(self, req, body):
         full_signature = req.get_header('X-Hub-Signature')
         if not full_signature or not full_signature.find('='):
             return False
-        sha_name, signature = req.get_header('X-Hub-Signature').split('=')
+        sha_name, signature = full_signature.split('=')
         if sha_name != 'sha1':
             return False
         hook_secret = str(self._config('hook_secret'))
-        mac = hmac.new(hook_secret, msg = str(req.read()), digestmod = sha1)
+        mac = hmac.new(hook_secret, msg = str(body), digestmod = sha1)
         return hmac.compare_digest(mac.hexdigest(), signature)
 
 
@@ -294,20 +297,84 @@ class GitHubIssueHook(GitHubMixin, Component):
 
     # IRequestHandler method
     def process_request(self, req):
-        if not self.verify_signature(req):
+        body = req.read()
+
+        if not self.verify_signature(req, body):
             msg = u'Invalid hook signature from %s, ignoring request.\n' % req.remote_addr
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
 
         event = req.get_header('X-GitHub-Event')
         if event == 'ping':
-            payload = json.loads(req.read())
+            payload = json.loads(body)
             req.send(payload['zen'].encode('utf-8'), 'text/plain', 200)
-            return
+            pass
         if event not in ['issue_comment', 'issues', 'pull_request', 'pull_request_review_comment']:
             msg = u'Unsupported event recieved (%s), ignoring request.\n' % event
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
-            return
+            pass
 
-        req.send(u'Running %s hook:' % event, 'text/plain', 200)
+        event_method = getattr(self, '_event_' + event)
+        event_method(req, json.loads(body))
+
+    def _event_issue_comment(self, req, data):
+        req.send(u'Running issue_comment hook', 'text/plain', 200)
+        pass
+
+    def _event_issues(self, req, data):
+        req.send(u'Running issues hook', 'text/plain', 200)
+        pass
+
+    def _event_pull_request(self, req, data):
+        pull = data['pull_request']
+        author = data['sender']['login'] + ' (GitHub)'
+
+        if data['action'] == 'opened':
+            ticket = Ticket(self.env)
+            ticket['reporter'] = author
+            ticket['summary'] = pull['title']
+            ticket['description'] = pull['body']
+            ticket['description'] += "\n\nPull Request: %s" % pull['html_url']
+            ticket['status'] = 'new'
+            ticket_id = ticket.insert()
+
+            response = urllib2.urlopen(pull['patch_url'])
+            self.create_attachment(ticket_id, pull['number'], response.read(), author)
+
+            req.send('Synced to new ticket #%d' % ticket_id, 'text/plain', 200)
+
+        elif data['action'] == 'synchronize':
+            # TODO: Fetch the associated Trac ticket based on pull request.
+            ticket_id = 6
+
+            response = urllib2.urlopen(pull['patch_url'])
+            self.create_attachment(ticket_id, pull['number'], response.read(), author)
+
+            req.send('Synced new patch to ticket #%d' % ticket_id, 'text/plain', 200)
+
+        elif data['action'] == 'closed':
+            pass
+
+        elif data['action'] == 'reopened':
+            pass
+
+    def _event_pull_request_review_comment(self, req, data):
+        req.send(u'Running pull_request_review_comment hook', 'text/plain', 200)
+        pass
+
+    def create_attachment(self, ticket_id, pull_id, patch, author = None):
+        if len(patch) > self.env.config.get('attachment', 'max_size'):
+            self.log.warning('GitHub patch (#%d) too big to attach to ticket #%d' % (pull_id, ticket_id))
+            pass
+
+        # Create a temp file object for Trac attachments.
+        temp_fd = os.tmpfile()
+        temp_fd.write(patch)
+        temp_fd.seek(0)
+
+        attachment = Attachment(self.env, 'ticket', ticket_id)
+        if author:
+            attachment.author = author
+        filename = 'github-pull-%d.patch' % pull_id
+        attachment.insert(filename, temp_fd, len(patch))
