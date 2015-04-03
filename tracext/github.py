@@ -321,10 +321,48 @@ class GitHubIssueHook(GitHubMixin, Component):
         event_method(req, json.loads(body))
 
     def _event_issue_comment(self, req, data):
-        req.send(u'Running issue_comment hook', 'text/plain', 200)
+        comment = data['comment']
+        author = comment['user']['login'] + ' (GitHub)'
+        issue = data['repository']['full_name'] + '#' + str(data['issue']['number'])
+        issue = issue.encode('utf-8')
+
+        ticket_id = self.find_ticket(issue)
+
+        if data['action'] == 'created':
+            ticket = Ticket(self.env, ticket_id)
+            ticket.save_changes(author, comment['body'])
+            req.send('Comment added to ticket #%d.' % ticket_id, 'text/plain', 200)
+
+        else:
+            req.send('No action taken for this hook.', 'text/plain', 200)
 
     def _event_issues(self, req, data):
-        req.send(u'Running issues hook', 'text/plain', 200)
+        author = data['sender']['login'] + ' (GitHub)'
+        issue = data['repository']['full_name'] + '#' + str(data['issue']['number'])
+        issue = issue.encode('utf-8')
+
+        if data['action'] == 'opened':
+            ticket = Ticket(self.env)
+            ticket['reporter'] = author
+            ticket['summary'] = data['issue']['title']
+            ticket['description'] = data['issue']['body']
+            ticket['description'] += "\n\n!GitHub Issue: %s" % data['issue']['html_url']
+            ticket['status'] = 'new'
+            ticket_id = ticket.insert()
+
+            self.log.debug(str(ticket_id))
+            self.mark_github_issue(ticket_id, issue)
+
+            req.send('Synced to new ticket #%d' % ticket_id, 'text/plain', 200)
+
+        elif data['action'] == 'closed':
+            pass
+
+        elif data['action'] == 'reopened':
+            pass
+
+        else:
+            req.send('No action taken for this hook.', 'text/plain', 200)
 
     def _event_pull_request(self, req, data):
         pull = data['pull_request']
@@ -354,7 +392,10 @@ class GitHubIssueHook(GitHubMixin, Component):
             if ticket_id:
                 response = urllib2.urlopen(pull['patch_url'])
                 self.create_attachment(ticket_id, pull['number'], response.read(), author)
-                req.send('Synced new patch to ticket #%d' % ticket_id, 'text/plain', 200)
+                req.send('Attached new patch to ticket #%d.' % ticket_id, 'text/plain', 200)
+
+            # This happens if sync is turned on after existing PRs were opened.
+            req.send('No ticket to sync patch for issue %s.' % issue, 'text/plain', 200)
 
         elif data['action'] == 'closed':
             pass
@@ -362,8 +403,28 @@ class GitHubIssueHook(GitHubMixin, Component):
         elif data['action'] == 'reopened':
             pass
 
+        else:
+            req.send('No action taken for this hook.', 'text/plain', 200)
+
     def _event_pull_request_review_comment(self, req, data):
-        req.send(u'Running pull_request_review_comment hook', 'text/plain', 200)
+        comment = data['comment']
+        pull = data['pull_request']
+        author = comment['user']['login'] + ' (GitHub)'
+        issue = data['repository']['full_name'] + '#' + str(pull['number'])
+        issue = issue.encode('utf-8')
+
+        ticket_id = self.find_ticket(issue)
+
+        if data['action'] == 'created':
+            ticket = Ticket(self.env, ticket_id)
+            ticket.save_changes(author,
+                "%s\n\n[%s See Inline Patch Context]" %
+                (comment['body'], comment['html_url'])
+            )
+            req.send('Comment added to ticket #%d.' % ticket_id, 'text/plain', 200)
+
+        else:
+            req.send('No action taken for this hook.', 'text/plain', 200)
 
     def mark_github_issue(self, ticket_id, github_issue):
         """
@@ -384,11 +445,11 @@ class GitHubIssueHook(GitHubMixin, Component):
             cursor = db.cursor()
             cursor.execute(
                 "DELETE FROM ticket_custom WHERE ticket = %d AND name = %%s" %
-                [ticket_id], ['github_issue']
+                ticket_id, ['github_issue']
             )
             cursor.execute(
                 "INSERT INTO ticket_custom VALUES (%d, %%s, %%s)" %
-                [ticket_id], ['github_issue', github_issue]
+                ticket_id, ['github_issue', github_issue]
             )
 
     def find_ticket(self, github_issue):
