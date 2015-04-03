@@ -9,6 +9,7 @@ import urllib2
 from genshi.builder import tag
 
 from trac.attachment import Attachment
+from trac.db import with_transaction
 from trac.config import ListOption, Option
 from trac.core import Component, implements
 from trac.ticket.model import Ticket
@@ -329,6 +330,8 @@ class GitHubIssueHook(GitHubMixin, Component):
     def _event_pull_request(self, req, data):
         pull = data['pull_request']
         author = data['sender']['login'] + ' (GitHub)'
+        issue = data['repository']['full_name'] + '#' + str(pull['number'])
+        issue = issue.encode('utf-8')
 
         if data['action'] == 'opened':
             ticket = Ticket(self.env)
@@ -339,19 +342,20 @@ class GitHubIssueHook(GitHubMixin, Component):
             ticket['status'] = 'new'
             ticket_id = ticket.insert()
 
+            self.mark_github_issue(ticket_id, issue)
+
             response = urllib2.urlopen(pull['patch_url'])
             self.create_attachment(ticket_id, pull['number'], response.read(), author)
 
             req.send('Synced to new ticket #%d' % ticket_id, 'text/plain', 200)
 
         elif data['action'] == 'synchronize':
-            # TODO: Fetch the associated Trac ticket based on pull request.
-            ticket_id = 6
+            ticket_id = self.find_ticket(issue)
 
-            response = urllib2.urlopen(pull['patch_url'])
-            self.create_attachment(ticket_id, pull['number'], response.read(), author)
-
-            req.send('Synced new patch to ticket #%d' % ticket_id, 'text/plain', 200)
+            if ticket_id:
+                response = urllib2.urlopen(pull['patch_url'])
+                self.create_attachment(ticket_id, pull['number'], response.read(), author)
+                req.send('Synced new patch to ticket #%d' % ticket_id, 'text/plain', 200)
 
         elif data['action'] == 'closed':
             pass
@@ -362,6 +366,43 @@ class GitHubIssueHook(GitHubMixin, Component):
     def _event_pull_request_review_comment(self, req, data):
         req.send(u'Running pull_request_review_comment hook', 'text/plain', 200)
         pass
+
+    def mark_github_issue(self, ticket_id, github_issue):
+        """
+        Manually save a custom field on the ticket (github_issue) with the
+        canonical GitHub address for the issue.
+
+        We manually do this instead of instructing users to manually setup a
+        custom field since it's only necessary internally. End users can still
+        configure it if they want though. Hopefully, this also prevents ticket
+        split/copy plugins from duplicating the github_issue field since this
+        only supports syncing with one ticket.
+
+        Several GitHub repos could be saving here, so don't only use number.
+        """
+
+        @with_transaction(self.env)
+        def sql_transaction(db):
+            cursor = db.cursor()
+            cursor.execute(
+                "DELETE FROM ticket_custom WHERE ticket = %d AND name = '%s'" %
+                (ticket_id, 'github_issue')
+            )
+            cursor.execute(
+                "INSERT INTO ticket_custom VALUES (%d, '%s', '%s')" %
+                (ticket_id, 'github_issue', github_issue)
+            )
+
+    def find_ticket(self, github_issue):
+        """
+        Return the ticket_id for the given GitHub issue if it exists.
+        """
+
+        rows = self.env.db_query(
+            "SELECT ticket FROM ticket_custom WHERE name = '%s' AND value = '%s'" %
+            ('github_issue', github_issue)
+        )
+        return int(rows[0][0]) if rows else None
 
     def create_attachment(self, ticket_id, pull_id, patch, author = None):
         if len(patch) > self.env.config.get('attachment', 'max_size'):
