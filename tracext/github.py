@@ -304,28 +304,27 @@ class GitHubIssueHook(GitHubMixin, Component):
             msg = u'Invalid hook signature from %s, ignoring request.\n' % req.remote_addr
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
+            return
 
         event = req.get_header('X-GitHub-Event')
         if event == 'ping':
             payload = json.loads(body)
             req.send(payload['zen'].encode('utf-8'), 'text/plain', 200)
-            pass
+            return
         if event not in ['issue_comment', 'issues', 'pull_request', 'pull_request_review_comment']:
             msg = u'Unsupported event recieved (%s), ignoring request.\n' % event
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
-            pass
+            return
 
         event_method = getattr(self, '_event_' + event)
         event_method(req, json.loads(body))
 
     def _event_issue_comment(self, req, data):
         req.send(u'Running issue_comment hook', 'text/plain', 200)
-        pass
 
     def _event_issues(self, req, data):
         req.send(u'Running issues hook', 'text/plain', 200)
-        pass
 
     def _event_pull_request(self, req, data):
         pull = data['pull_request']
@@ -365,7 +364,6 @@ class GitHubIssueHook(GitHubMixin, Component):
 
     def _event_pull_request_review_comment(self, req, data):
         req.send(u'Running pull_request_review_comment hook', 'text/plain', 200)
-        pass
 
     def mark_github_issue(self, ticket_id, github_issue):
         """
@@ -385,12 +383,12 @@ class GitHubIssueHook(GitHubMixin, Component):
         def sql_transaction(db):
             cursor = db.cursor()
             cursor.execute(
-                "DELETE FROM ticket_custom WHERE ticket = %d AND name = '%s'" %
-                (ticket_id, 'github_issue')
+                "DELETE FROM ticket_custom WHERE ticket = %d AND name = %%s" %
+                [ticket_id], ['github_issue']
             )
             cursor.execute(
-                "INSERT INTO ticket_custom VALUES (%d, '%s', '%s')" %
-                (ticket_id, 'github_issue', github_issue)
+                "INSERT INTO ticket_custom VALUES (%d, %%s, %%s)" %
+                [ticket_id], ['github_issue', github_issue]
             )
 
     def find_ticket(self, github_issue):
@@ -399,15 +397,15 @@ class GitHubIssueHook(GitHubMixin, Component):
         """
 
         rows = self.env.db_query(
-            "SELECT ticket FROM ticket_custom WHERE name = '%s' AND value = '%s'" %
-            ('github_issue', github_issue)
+            "SELECT ticket FROM ticket_custom WHERE name = %s AND value = %s",
+            ['github_issue', github_issue]
         )
         return int(rows[0][0]) if rows else None
 
     def create_attachment(self, ticket_id, pull_id, patch, author = None):
         if len(patch) > self.env.config.get('attachment', 'max_size'):
             self.log.warning('GitHub patch (#%d) too big to attach to ticket #%d' % (pull_id, ticket_id))
-            pass
+            return
 
         # Create a temp file object for Trac attachments.
         temp_fd = os.tmpfile()
