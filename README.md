@@ -4,12 +4,13 @@ Trac - GitHub integration
 Features
 --------
 
-This Trac plugin performs three functions:
+This Trac plugin performs four functions:
 
 1. update the local git mirror used by Trac after each push to GitHub, and
    notify the new changesets to Trac;
 2. authenticate users with their GitHub account;
 3. replace Trac's built-in browser by GitHub's.
+4. Sync any new GitHub issues and pull requests into Trac tickets.
 
 The notification of new changesets is strictly equivalent to the command
 described in Trac's setup guide:
@@ -161,6 +162,75 @@ To enable it, edit `trac.ini` as follows:
 
 Since it replaces standard URLs of Trac, you must disable three components in
 `trac.versioncontrol.web_ui`, as shown above.
+
+### Syncing Issues and Pull Requests
+
+**`tracext.github.GitHubIssueHook`** implements a a few GitHub hooks called
+when a new issue or pull request is opened, commented on, or changed.
+
+It will open a new Trac ticket with the corresponding issue or pull request
+title and description, setting the reporter to "username (GitHub)". It will use
+all default ticket fields for everything else. It will also automatically
+attach a patch file for any pull requests, along with any new patches when
+someone pushes new commits to any existing pull request.
+
+Additionally, if any comments are left on the issue or pull request (including
+inline patch comments on pulls) on GitHub, they will be posted to the Trac
+ticket as well.
+
+Unlike the post-commit hook used for syncing any GitHub repos, these hooks are
+required to configure a hook "secret" used to verify that the hooks were sent
+from GitHub. This is to prevent spam tickets and comments. So first, you should
+generate a random secret to be used with this hook. Ideally, it should be a
+random string about 40 characters long containing only `[0-9a-f]` characters.
+You can generate this on the command line by running this if you prefer:
+
+    $ ruby -rsecurerandom -e 'puts SecureRandom.hex(20)'
+
+It should look like this (don't just use this string though!):
+`cc6f7dddec47e4e10a423dcfbab5c102f506f72d`
+
+Save that somewhere safe, you will use this as your `hook_secret`.
+
+Edit your `trac.ini` as follows to configure syncing:
+
+    [components]
+    tracext.github.GitHubIssueHook = enabled
+
+    [github]
+    hook_secret = <your_hook_secret_here>
+
+Reload the web server, browse to the home page of your project in Trac and
+append `/github-issues` to the URL. You should see the following message:
+
+    Endpoint is ready to accept GitHub notifications.
+
+This is the URL of the issues endpoint we'll use for the hook.
+
+If you get a Trac error page saying "No handler matched request to
+/github-issues" instead, the plugin isn't installed properly. Make sure you've
+followed the installation instructions correctly and search Trac's logs for
+errors.
+
+This hook supports creating tickets for multiple GitHub repos if you want it to
+watch issues and pull requests from several of them at the same time. So it's
+possible to create an "organization hook", which will fire for all organization
+repositories, or just create any number of "repository hooks" for the repos you
+want it to watch. The configuration for either is exactly the same.
+
+Go to your organization's or repository's settings page on GitHub. In the
+"Webhooks & Services" tab, click "Add webhook". Put the URL of the endpoint in
+the "Payload URL" field, leave the "Content type" as "application/json", and set
+the "Secret" to the 40 character `hook_secret` you generated earlier. Now select
+the "Let me select individual events" radio option, and check the following
+hooks: "Issue Comments", "Issues", "Pull Request", and "Pull Request review
+comment". Then click "Add webhook", and you're done.
+
+If you click on the webhook you just created, at the bottom of the page, you
+should see that a "ping" payload was successufully delivered to Trac.
+
+If you already have existing issues or pull requests, they will not be synced
+to Trac. Only new issues and pull requests will be synced.
 
 Advanced setup
 --------------
@@ -319,6 +389,10 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 
 Changelog
 ---------
+
+### 2.2
+
+* Add support for syncing issues and pull requests.
 
 ### 2.1
 

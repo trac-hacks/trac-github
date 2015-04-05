@@ -298,6 +298,15 @@ class GitHubIssueHook(GitHubMixin, Component):
 
     # IRequestHandler method
     def process_request(self, req):
+        if req.method == 'GET':
+            req.send('Endpoint is ready to accept GitHub notifications.', 'text/plain', 200)
+            return
+        if req.method != 'POST':
+            msg = u'Method not allowed (%s)\n' % req.method
+            self.log.warning(msg.rstrip('\n'))
+            req.send(msg.encode('utf-8'), 'text/plain', 405)
+            return
+
         body = req.read()
 
         if not self.verify_signature(req, body):
@@ -350,7 +359,6 @@ class GitHubIssueHook(GitHubMixin, Component):
             ticket['status'] = 'new'
             ticket_id = ticket.insert()
 
-            self.log.debug(str(ticket_id))
             self.mark_github_issue(ticket_id, issue)
 
             req.send('Synced to new ticket #%d' % ticket_id, 'text/plain', 200)
