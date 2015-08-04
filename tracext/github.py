@@ -5,6 +5,7 @@ import re
 
 from genshi.builder import tag
 
+import trac
 from trac.config import ListOption, Option
 from trac.core import Component, implements
 from trac.util.translation import _
@@ -26,8 +27,18 @@ class GitHubLoginModule(LoginModule):
             # Use the same names as LoginModule to avoid duplicates.
             yield ('metanav', 'login', _('logged in as %(user)s',
                                          user=req.authname))
-            yield ('metanav', 'logout',
-                   tag.a(_('Logout'), href=req.href.github('logout')))
+            from pkg_resources import parse_version
+            if parse_version(trac.__version__) < parse_version('1.0.2'):
+                yield ('metanav', 'logout',
+                       tag.a(_('Logout'), href=req.href.github('logout')))
+            else:
+                yield ('metanav', 'logout',
+                       tag.form(tag.div(tag.button(_('Logout'),
+                                                   name='logout',
+                                                   type='submit')),
+                                action=req.href.github('logout'),
+                                method='post', id='logout',
+                                class_='trac-logout'))
         else:
             # Use a different name from LoginModule to allow both in parallel.
             yield ('metanav', 'github_login',
