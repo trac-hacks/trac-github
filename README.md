@@ -73,9 +73,9 @@ trac-github plugins:
     [github]
     repository = <user>/<project>
 
-    [trac]
-    repository_dir = /home/trac/<project>.git
-    repository_type = git
+    [repositories]
+    .dir = /home/trac/<project>.git
+    .type = git
 
 In Trac 0.12, use `tracext.git.* = enabled` instead of
 `tracopt.versioncontrol.git.* = enabled`.
