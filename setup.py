@@ -5,7 +5,7 @@ setup(
     version='2.1.2',
     author='Aymeric Augustin',
     author_email='aymeric.augustin@m4x.org',
-    url='https://github.com/aaugustin/trac-github',
+    url='https://github.com/trac-hacks/trac-github',
     description='Trac - GitHub integration',
     download_url='http://pypi.python.org/pypi/trac-github',
     packages=['tracext'],
