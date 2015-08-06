@@ -320,6 +320,22 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 Changelog
 ---------
 
+### 2.1.3
+
+* Fix GitHub login failure with recent versions of oauthlib.
+* Fix logout after GitHub login on Trac >= 1.0.2.
+* Update configuration example to reflect Trac's current best practice.
+* Move the project to the track-hacks organization on GitHub.
+
+### 2.1.2
+
+* Make `tracext` a namespace package to support installation as an egg.
+* Improve responses when there's no repository at a requests's target URL.
+
+### 2.1.1
+
+* Fix GitHub login failure when a user has no email on GitHub.
+
 ### 2.1
 
 * Add support for GitHub login.
