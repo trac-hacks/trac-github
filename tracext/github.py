@@ -90,7 +90,7 @@ class GitHubLoginModule(LoginModule):
         redirect_uri = req.abs_href.github('oauth')
         # Inner import to avoid a hard dependency on requests-oauthlib.
         from requests_oauthlib import OAuth2Session
-        return OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[])
+        return OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[''])
 
     def _client_config(self, key):
         assert key in ('id', 'secret')
