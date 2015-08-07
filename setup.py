@@ -12,5 +12,10 @@ setup(
     namespace_packages=['tracext'],
     platforms='all',
     license='BSD',
-    entry_points={'trac.plugins': ['github = tracext.github']},
+    extras_require={'oauth': ['requests_oauthlib >= 0.5']},
+    entry_points={'trac.plugins': [
+        'github.browser = tracext.github:GitHubBrowser',
+        'github.loginmodule = tracext.github:GitHubLoginModule[oauth]',
+        'github.postcommithook = tracext.github:GitHubPostCommitHook',
+    ]},
 )
