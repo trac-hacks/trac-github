@@ -9,7 +9,7 @@ This Trac plugin performs three functions:
 1. update the local git mirror used by Trac after each push to GitHub, and
    notify the new changesets to Trac;
 2. authenticate users with their GitHub account;
-3. replace Trac's built-in browser by GitHub's.
+3. direct changeset TracLinks to GitHub's repository browser.
 
 The notification of new changesets is strictly equivalent to the command
 described in Trac's setup guide:
@@ -147,9 +147,8 @@ configuration file, you have some alternatives:
 
 ### Browser
 
-**`tracext.github.GitHubBrowser`** replaces Trac's built-in browser by
-redirecting to the corresponding pages on GitHub. It depends on the
-post-commit hook.
+**`tracext.github.GitHubBrowser`** redirects changeset TracLinks to
+the GitHub repositor browser. It requires the post-commit hook.
 
 To enable it, edit `trac.ini` as follows:
 
