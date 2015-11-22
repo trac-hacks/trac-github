@@ -319,12 +319,17 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 Changelog
 ---------
 
+### 2.1.4
+
+ * Make `requests-oauthlib` a requirement for `GitHubLoginModule`.
+ * Improve description of functionality provided by plugin.
+
 ### 2.1.3
 
 * Fix GitHub login failure with recent versions of oauthlib.
 * Fix logout after GitHub login on Trac >= 1.0.2.
 * Update configuration example to reflect Trac's current best practice.
-* Move the project to the track-hacks organization on GitHub.
+* Move the project to the trac-hacks organization on GitHub.
 
 ### 2.1.2
 
