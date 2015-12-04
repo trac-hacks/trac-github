@@ -99,8 +99,7 @@ installation instructions correctly and search Trac's logs for errors.
 
 Now go to your project's settings page on GitHub. In the "Webhooks & Services"
 tab, click "Add webhook". Put the URL of the endpoint in the "Payload URL"
-field and set the "Payload version" to application/vnd.github.v3+json. Then
-click "Add webhook".
+field and set the "Content type" to `application/json`. Click "Add webhook".
 
 If you click on the webhook you just created, at the bottom of the page, you
 should see that a "ping" payload was successufully delivered to Trac
