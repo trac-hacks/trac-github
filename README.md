@@ -371,4 +371,4 @@ License
 
 This plugin is released under the BSD license.
 
-It was initially written for [Django's Trac](https://code.djangoproject.com/).
+It was initially written for [Django's Trac](https://code.djangoproject.com/). Prominent users include [jQuery Trac](https://bugs.jquery.com) and [jQuery UI Trac](https://bugs.jqueryui.com).
