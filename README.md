@@ -86,6 +86,14 @@ required, but it's the most useful feature enabled by trac-github.
 
 Reload the web server and your repository should appear in Trac.
 
+Perform an initial synchronization of the cache.
+
+    trac-admin $env repository resync "(default)"
+
+Note that `"(default")` will need to be replaced with the repository
+name if a named repository is used. See the
+[Trac documentation](TracRepositoryAdmin#ReposTracIni) for more information.
+
 Browse to the home page of your project in Trac and append `/github` to the
 URL. You should see the following message:
 
