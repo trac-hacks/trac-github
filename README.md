@@ -70,6 +70,9 @@ trac-github plugins:
     tracopt.ticket.commit_updater.* = enabled
     tracopt.versioncontrol.git.* = enabled
 
+    [git]
+    trac_user_rlookup = enabled
+
     [github]
     repository = <user>/<project>
 
@@ -83,6 +86,15 @@ In Trac 0.12, use `tracext.git.* = enabled` instead of
 `tracopt.ticket.commit_updater.*` activates the [commit ticket
 updater](http://trac.edgewall.org/wiki/CommitTicketUpdater). It isn't
 required, but it's the most useful feature enabled by trac-github.
+
+The author names that Trac caches are of the pattern
+`Full Name <email@domain.com>`. The `trac_user_rlookup` option enables
+reverse mapping from email address to Trac user id. This is necessary
+for commit ticket updater to function, and for `[trac]` options like
+[show_full_names](https://trac.edgewall.org/wiki/TracIni#/show_full_names)
+and 
+[show_email_addresses](https://trac.edgewall.org/wiki/TracIni#/show_email_addresses)
+to be effective.
 
 Reload the web server and your repository should appear in Trac.
 
