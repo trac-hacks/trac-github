@@ -133,11 +133,12 @@ successful login if they're public and saves them in the preferences.
 To use this module, your Trac instance must be served over HTTPS. This is a
 requirement of the OAuth2 standard.
 
-Go to your accounts's settings page on GitHub. In the "Application" tab, click
-"Register new application" and fill in the form. The "Authorization callback
-URL", put the URL of the homepage of your project in Trac, starting with
-`https://`, and append `/github/oauth`. In other words, this is the URL of the
-endpoint you used above plus `/oauth`. Then click "Register application".
+Go to your accounts settings page on GitHub. From the *OAuth Application*
+page, click the *Developer applications* tab and *Register new application*.
+For the "Authorization callback URL", put the URL of the homepage of your
+project in Trac, starting with `https://`, and append `/github/oauth`.
+In other words, this is the URL of the endpoint you used above plus `/oauth`
+Then click *Register application*.
 
 You're redirected to your newly created application's page, which provides a
 Client ID and a Client Secret.
