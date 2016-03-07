@@ -13,6 +13,7 @@ from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManag
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
 from trac.web.api import IRequestHandler
 from trac.web.auth import LoginModule
+from trac.web.chrome import add_warning
 
 
 class GitHubLoginModule(LoginModule):
@@ -71,10 +72,16 @@ class GitHubLoginModule(LoginModule):
         oauth = self._oauth_session(req)
         authorization_response = req.abs_href(req.path_info) + '?' + req.query_string
         client_secret = self._client_config('secret')
-        oauth.fetch_token(
-            'https://github.com/login/oauth/access_token',
-            authorization_response=authorization_response,
-            client_secret=client_secret)
+        import oauthlib
+        try:
+            oauth.fetch_token(
+                'https://github.com/login/oauth/access_token',
+                authorization_response=authorization_response,
+                client_secret=client_secret)
+        except oauthlib.oauth2.MissingTokenError, e:
+            self.log.warn(e)
+            add_warning(req, _("Invalid request. Please try to login again."))
+            self._redirect_back(req)
 
         user = oauth.get('https://api.github.com/user').json()
         # Small hack to pass the username to _do_login.
