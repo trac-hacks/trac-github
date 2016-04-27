@@ -108,7 +108,7 @@ class GitHubLoginModule(LoginModule):
             return os.environ.get(value, '')
         else:
             with open(value) as f:
-                return f.read.strip()
+                return f.read().strip()
 
 
 class GitHubMixin(object):
