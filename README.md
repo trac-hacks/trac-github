@@ -92,7 +92,7 @@ The author names that Trac caches are of the pattern
 reverse mapping from email address to Trac user id. This is necessary
 for commit ticket updater to function, and for `[trac]` options like
 [show_full_names](https://trac.edgewall.org/wiki/TracIni#/show_full_names)
-and 
+and
 [show_email_addresses](https://trac.edgewall.org/wiki/TracIni#/show_email_addresses)
 to be effective.
 
@@ -338,6 +338,10 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 
 Changelog
 ---------
+
+### 2.1.5
+
+* Support reading the GitHub OAuth secret from a file.
 
 ### 2.1.4
 
