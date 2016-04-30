@@ -339,6 +339,10 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 Changelog
 ---------
 
+### 2.1.5
+ * Fix: Can't read GitHub OAuth secret from a file.
+ * Trap `MissingTokenError` and add a warning.
+
 ### 2.1.4
 
  * Make `requests-oauthlib` a requirement for `GitHubLoginModule`.
