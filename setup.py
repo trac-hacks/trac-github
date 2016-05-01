@@ -7,7 +7,7 @@ setup(
     author_email='aymeric.augustin@m4x.org',
     url='https://github.com/trac-hacks/trac-github',
     description='Trac - GitHub integration',
-    download_url='http://pypi.python.org/pypi/trac-github',
+    download_url='https://pypi.python.org/pypi/trac-github',
     packages=['tracext'],
     platforms='all',
     license='BSD',

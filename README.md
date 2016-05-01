@@ -342,11 +342,12 @@ Changelog
 ### 2.1.5
 
 * Support reading the GitHub OAuth secret from a file.
+* Trap `MissingTokenError` and add a warning.
 
 ### 2.1.4
 
- * Make `requests-oauthlib` a requirement for `GitHubLoginModule`.
- * Improve description of functionality provided by plugin.
+* Make `requests-oauthlib` a requirement for `GitHubLoginModule`.
+* Improve description of functionality provided by plugin.
 
 ### 2.1.3
 
