@@ -30,6 +30,10 @@ class GitHubLoginModule(LoginModule):
         'github', 'request_email', 'false',
         doc="Request access to the email address of the GitHub user.")
 
+    preferred_email_domain = Option(
+        'github', 'preferred_email_domain', '',
+        doc="Prefer email address under this domain over the primary address.")
+
     # INavigationContributor methods
 
     def get_active_navigation_item(self, req):
@@ -120,9 +124,14 @@ class GitHubLoginModule(LoginModule):
                     if not item['verified']:
                         # ignore unverified email addresses
                         continue
-                    if item['primary']:
+                    if (self.preferred_email_domain and
+                        item['email'].endswith('@' + self.preferred_email_domain)):
                         email = item['email']
                         break
+                    if item['primary']:
+                        email = item['email']
+                        if not self.preferred_email_domain:
+                            break
             except Exception as exc: # pylint: disable=broad-except
                 self._reject_oauth(
                     req, exc,

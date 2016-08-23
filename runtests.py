@@ -122,6 +122,8 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('github', 'alt.branches', 'master stable/*')
         if 'request_email' in kwargs:
             conf.set('github', 'request_email', kwargs['request_email'])
+        if 'preferred_email_domain' in kwargs:
+            conf.set('github', 'preferred_email_domain', kwargs['preferred_email_domain'])
         if 'organization' in kwargs:
             conf.set('github', 'organization', kwargs['organization'])
         if 'username' in kwargs and 'access_token' in kwargs:
@@ -599,6 +601,67 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         email = self.getEmail(answers, request_email=True)
         self.assertEqual(email, ['lololort@example.com'])
 
+    def testPreferredEmailDomain(self):
+        """
+        Test that an email address matching the preferred email domain is
+        preferred to one marked primary.
+        """
+        answers = {
+            '/user': {
+                'user': 'trololol',
+                'login': 'trololol'
+            },
+            '/user/emails': [
+                {
+                    'email': 'torvalds@linux-foundation.org',
+                    'verified': False,
+                    'primary': True
+                },
+                {
+                    'email': 'lololort@example.com',
+                    'verified': True,
+                    'primary': True
+                },
+                {
+                    'email': 'lololort@example.net',
+                    'verified': True,
+                    'primary': False
+                },
+            ]
+        }
+
+        email = self.getEmail(answers, request_email=True,
+                              preferred_email_domain='example.net')
+        self.assertEqual(email, ['lololort@example.net'])
+
+    def testPreferredEmailFallbackToPrimary(self):
+        """
+        Test that the primary address is chosen if no address matches the
+        preferred email domain.
+        """
+        answers = {
+            '/user': {
+                'user': 'trololol',
+                'login': 'trololol'
+            },
+            '/user/emails': [
+                {
+                    'email': 'lololort@example.com',
+                    'verified': True,
+                    'primary': True
+                },
+                {
+                    'email': 'lololort@example.net',
+                    'verified': True,
+                    'primary': False
+                },
+            ]
+        }
+
+        email = self.getEmail(answers, request_email=True,
+                              preferred_email_domain='example.org')
+        self.assertEqual(email, ['lololort@example.com'])
+
 
 class GitHubPostCommitHookTests(TracGitHubTests):
 
@@ -827,6 +890,7 @@ class TracContext(object):
 
     _valid_attrs = ('cached_git',
                     'request_email',
+                    'preferred_email_domain',
                     'organization',
                     'username',
                     'access_token',
