@@ -21,6 +21,9 @@ class GitHubLoginModule(LoginModule):
     request_email = BoolOption('github', 'request_email', 'false',
             doc="Request access to the email address of the GitHub user.")
 
+    preferred_email_regex = Option('github', 'preferred_email_regex', '',
+            doc="Prefer email address matching this regex over the primary address.")
+
     # INavigationContributor methods
 
     def get_active_navigation_item(self, req):
@@ -96,10 +99,15 @@ class GitHubLoginModule(LoginModule):
         email = user.get('email')
         if self.request_email:
             emails = oauth.get('https://api.github.com/user/emails').json()
+            pattern = re.compile(self.preferred_email_regex)
             for item in emails:
+                if self.preferred_email_regex and pattern.match(item['email']):
+                        email = item['email']
+                        break
                 if item['primary']:
                     email = item['email']
-                    break
+                    if not self.preferred_email_regex:
+                        break
         # Small hack to pass the username to _do_login.
         req.environ['REMOTE_USER'] = user['login']
         # Save other available values in the session.

@@ -174,6 +174,10 @@ stored in the preferences on the first login.
 
     [github]
     request_email = true
+    preferred_email_regex = ^.*@example.org$
+
+if specified, the first address matching the optional preferred_email_regex will be
+used instead of the primary address.
 
 Note that the Trac mail address will only be initialized on the first login.
 Users can still change or remove the email address from their Trac account.
