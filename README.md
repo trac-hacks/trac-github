@@ -166,6 +166,19 @@ configuration file, you have some alternatives:
 - If `client_secret` is anything else, trac-github will interpret it as a file
   name and use the contents of that file as client secret.
 
+By default the preferences will use the public email address of the
+authenticated GitHub user. If the public email address is not set, the field
+will be empty. If the email address is important for your Trac installation
+(for example for notifications), the request_email option can be set to always
+request access to all email addresses from GitHub. The primary address will be
+stored in the preferences on the first login.
+
+    [github]
+    request_email = true
+
+Note that the Trac mail address will only be initialized on the first login.
+Users can still change or remove the email address from their Trac account.
+
 ### Browser
 
 **`tracext.github.GitHubBrowser`** redirects changeset TracLinks to
