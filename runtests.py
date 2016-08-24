@@ -5,6 +5,7 @@
 Trac's testing framework isn't well suited for plugins, so we NIH'd a bit.
 """
 
+import BaseHTTPServer
 import ConfigParser
 import glob
 import json
@@ -14,6 +15,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import unittest
 import urllib2
@@ -81,7 +83,7 @@ class TracGitHubTests(unittest.TestCase):
         shutil.rmtree('%s-mirror' % ALTGIT)
 
     @classmethod
-    def createTracEnvironment(cls):
+    def createTracEnvironment(cls, **kwargs):
         subprocess.check_output(['trac-admin', ENV, 'initenv',
                 'Trac - GitHub tests', 'sqlite:db/trac.db'])
         subprocess.check_output(['trac-admin', ENV, 'permission',
@@ -101,7 +103,10 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('components', 'tracopt.ticket.commit_updater.*', 'enabled')
         conf.set('components', 'tracopt.versioncontrol.git.*', 'enabled')       # Trac 1.0
 
-        if cls.cached_git:
+        cached_git = cls.cached_git
+        if 'cached_git' in kwargs:
+            cached_git = kwargs['cached_git']
+        if cached_git:
             conf.add_section('git')
             conf.set('git', 'cached_repository', 'true')
             conf.set('git', 'persistent_cache', 'true')
@@ -112,10 +117,22 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('github', 'repository', 'aaugustin/trac-github')
         conf.set('github', 'alt.repository', 'follower/trac-github')
         conf.set('github', 'alt.branches', 'master stable/*')
+        if 'organization' in kwargs:
+            conf.set('github', 'organization', kwargs['organization'])
+        if 'username' in kwargs and 'access_token' in kwargs:
+            conf.set('github', 'username', kwargs['username'])
+            conf.set('github', 'access_token', kwargs['access_token'])
+        if 'webhook_secret' in kwargs:
+            conf.set('github', 'webhook_secret', kwargs['webhook_secret'])
 
         if SHOW_LOG:
             # The [logging] section already exists in the default trac.ini file.
             conf.set('logging', 'log_type', 'stderr')
+        else:
+            # Write debug log so you can read it on crashes
+            conf.set('logging', 'log_type', 'file')
+            conf.set('logging', 'log_file', 'trac.log')
+            conf.set('logging', 'log_level', 'DEBUG')
 
         conf.add_section('repositories')
         conf.set('repositories', '.dir', os.path.realpath('%s-mirror' % GIT))
@@ -499,6 +516,856 @@ class GitHubBrowserWithCacheTests(GitHubBrowserTests):
 class GitHubPostCommitHookWithCacheTests(GitHubPostCommitHookTests):
 
     cached_git = True
+
+
+class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
+    def log_message(self, format, *args):
+        # Visibly differentiate GitHub API mock logging from tracd logs
+        sys.stderr.write("%s [%s] %s\n" %
+                         (self.__class__.__name__,
+                          self.log_date_time_string(),
+                          format%args))
+
+    def do_GET(self):
+        md = self.server.mockdata
+        md['lock'].acquire()
+        retcode = md['retcode']
+        contenttype = md['content-type']
+        answers = md['answers'].copy()
+        md['lock'].release()
+
+        if self.path in answers:
+            answer = answers[self.path]
+        else:
+            answer = {'message': 'No handler for URI %s' % self.path}
+            retcode = 404
+
+        self.send_response(retcode)
+        self.send_header("Content-Type", contenttype)
+        self.end_headers()
+        self.wfile.write(json.dumps(answer))
+
+class TracContext(object):
+    """
+    Context manager that starts and stops a configured tracd instance on port
+    8765.
+    """
+
+    _valid_attrs = ('cached_git', 'organization', 'username', 'access_token', 'webhook_secret')
+    """ List of all valid attributes to be passed to createTracEnvironment() """
+
+    cached_git = False
+    """ Whether to use a persistent repository cache """
+
+    traclock = threading.Lock()
+    """ Lock to ensure no two trac instances are started simultaneously. """
+
+    def __init__(self, testobj, env=None, **kwargs):
+        """
+        Set up a new Trac context manager. Arguments are:
+
+        :param testobj: An instance of `TracGitHubTests` used to create the
+                        Trac environment and start tracd.
+        :param env: Dictionary of environment variables to set when starting
+                    tracd, or `None` for a copy of the current environment.
+        :param cached_git: `True` to use a persistent repository cache;
+                            defaults to `False`.
+        :param organization: Name of the GitHub organization to configure for
+                             group syncing. Defaults to unset.
+        :param username: Username of the GitHub user to use for group syncing.
+                         Defaults to unset.
+        :param access_token: GitHub access token of the GitHub user to use for
+                             group syncing. Defaults to unset.
+        :param webhook_secret: Secret used to validate WebHook API calls if
+                               present. Defaults to unset.
+        """
+        for kwarg in kwargs:
+            if kwarg in self._valid_attrs:
+                setattr(self, kwarg, kwargs[kwarg])
+        self._env = env
+        self._testobj = testobj
+
+    def __enter__(self):
+        """
+        Create a trac environment and start a tracd instance with this
+        environment. Returns an instance of a `trac.env.Environment`.
+        """
+        # Only one trac environment at the same time because of the shared port
+        # and FS resources
+        self.traclock.acquire()
+
+        # Set up trac env
+        kwargs = {}
+        for attr in self._valid_attrs:
+            if hasattr(self, attr):
+                kwargs[attr] = getattr(self, attr)
+        self._testobj.createTracEnvironment(**kwargs)
+        self._tracenv = Environment(ENV)
+
+        # Start tracd
+        self._testobj.startTracd(env=self._env)
+
+        return self._tracenv
+
+    def __exit__(self, etype, evalue, traceback):
+        """
+        Shut down a running tracd instance and clean up the environment. Always
+        returns `False` to re-throw any exceptions that might have occurred.
+        """
+        # Stop tracd
+        self._testobj.stopTracd()
+        # Clean up trac env
+        self._tracenv.shutdown()
+        self._testobj.removeTracEnvironment()
+        self.traclock.release()
+        return False
+
+class GitHubGroupsProviderTests(TracGitHubTests):
+    # Append custom failure messages to the automatically generated ones
+    longMessage = True
+    # GitHubGroupsProvider configuration values (note that not all of those are always used!)
+    organization = 'org'
+    username = 'github-test-sync-user'
+    access_token = 'e42b79d0a8275cab1f8c8c8ff0e2d99537b54ed9'
+    webhook_secret = '6c12713595df9247974fa0f2f99b94c815f242035c49c7f009892bfd7d9f0f98'
+
+    @classmethod
+    def setUpClass(cls):
+        cls.createGitRepositories()
+        cls.startAPIMock()
+
+        # Prepare sets of tracd environment variables
+        tracd_env = os.environ.copy()
+        tracd_env.update({'TRAC_GITHUB_API_URL': 'http://127.0.0.1:8766/'})
+        tracd_env_debug = tracd_env.copy()
+        tracd_env_debug.update({'TRAC_GITHUB_ENABLE_DEBUGGING': '1'})
+        tracd_env_broken = tracd_env_debug.copy()
+        tracd_env_broken.update({'TRAC_GITHUB_API_URL': 'http://127.0.0.1:8767/'})
+
+        cls.tracd_env = tracd_env
+        cls.tracd_env_debug = tracd_env_debug
+        cls.tracd_env_broken = tracd_env_broken
+
+        # Prepare sets of trac configuration settings
+        trac_env = {
+            'cached_git': True,
+            'organization': cls.organization,
+            'username': cls.username,
+            'access_token': cls.access_token
+        }
+        trac_env_secured = trac_env.copy()
+        trac_env_secured.update({
+            'webhook_secret': cls.webhook_secret
+        })
+
+        cls.trac_env = trac_env
+        cls.trac_env_secured = trac_env_secured
+
+        # Set up shared data for the API mocking server and provide locking
+        mockdata = {
+            'lock': threading.Lock(),
+            'retcode': 500,
+            'content-type': 'application/json',
+            'answers': {}
+        }
+        cls.mockdata = mockdata
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.removeGitRepositories()
+        # API Mock server is a daemon thread and will automatically stop
+
+    @classmethod
+    def startAPIMock(cls):
+        cls.thread = threading.Thread(target=cls.apiMockServer)
+        cls.thread.daemon = True
+        cls.thread.start()
+
+    @classmethod
+    def updateMockData(cls, retcode=None, contenttype=None, answers=None):
+        cls.mockdata['lock'].acquire()
+        if retcode is not None:
+            cls.mockdata['retcode'] = retcode
+        if contenttype is not None:
+            cls.mockdata['content-type'] = contenttype
+        if answers is not None:
+            cls.mockdata['answers'] = answers.copy()
+        cls.mockdata['lock'].release()
+
+    @classmethod
+    def apiMockServer(cls):
+        httpd = BaseHTTPServer.HTTPServer(('127.0.0.1', 8766), GitHubAPIMock)
+        # Make mockdata available to server
+        httpd.mockdata = cls.mockdata
+        httpd.serve_forever()
+
+    def test_000_api_refuses_connection(self):
+        """
+        Test that a request does not fail even if the API refuses connections.
+        """
+        with TracContext(self, env=self.tracd_env_broken, **self.trac_env):
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200,
+                             "Request with unresponsive API endpoint should not fail")
+            self.assertEqual(response.json(), {},
+                             "Unavailable API should yield no groups at all.")
+
+    def test_001_unconfigured(self):
+        """
+        Test whether a request with an unconfigured GitHubGroupsProvider fails.
+        """
+        with TracContext(self):
+            response = requests.get(URL + '/newticket', allow_redirects=False)
+            self.assertEqual(response.status_code, 200,
+                             "Unconfigured GitHubGroupsProvider caused requests to fail")
+
+    def test_002_disabled_debugging(self):
+        """
+        Test that the debugging functionality does not work if not explicitly enabled.
+        """
+        self.assertNotIn('TRAC_GITHUB_ENABLE_DEBUGGING', self.tracd_env,
+                         "tracd_env enables debugging, but should not; did you export TRAC_GITHUB_ENABLE_DEBUGGING?")
+        with TracContext(self, env=self.tracd_env):
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 404,
+                             "Debugging API was not enabled, but did not return HTTP 404")
+
+    def test_003_api_returns_500(self):
+        """
+        Test that a request with a failing API endpoint still succeeds.
+        """
+        self.updateMockData(retcode=500, answers={
+            '/orgs/%s/teams' % self.organization: {}
+        })
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200,
+                             "Request with failing API endpoint should not fail")
+            self.assertEqual(response.json(), {},
+                             "500 on API should yield no groups at all")
+
+    def test_004_api_returns_404(self):
+        """
+        Test that a request with non-existant API endpoint still succeeds.
+        """
+        self.updateMockData(retcode=404, answers={})
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200,
+                             "Request with 404 API endpoint should not fail")
+            self.assertEqual(response.json(), {},
+                             "404 on API should yield no groups at all")
+
+    def test_005_org_has_no_teams(self):
+        """
+        Test that a GitHub organization without teams is handled correctly.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200,
+                             "Request with organization without teams should not fail")
+            self.assertEqual(response.json(), {},
+                             "No github teams should yield no groups, but groups were returned")
+
+    def test_006_normal_operation(self):
+        """
+        Test results of normal operation and conversion of API results.
+        """
+        users = [
+            {"login": u"octocat"},
+            {"login": u"octobird"},
+            {"login": u"octodolphin"},
+            {"login": u"octofox"}
+        ]
+        team1members = [
+            users[0],
+            users[1],
+            users[2]
+        ]
+        team12members = [
+            users[0],
+            users[2],
+            users[3]
+        ]
+
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: [
+                {
+                    "id": 1,
+                    "name": u"Justice League",
+                    "slug": u"justice-league"
+                },
+                {
+                    "id": 12,
+                    "name": u"The League of Extraordinary Gentlemen and Gentlewomen",
+                    "slug": u"gentlepeople"
+                }
+            ],
+            '/teams/1/members': team1members,
+            '/teams/12/members': team12members
+        })
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200)
+
+            data = response.json()
+            # All users present?
+            for user in users:
+                login = user['login']
+                self.assertIn(login, data, "user %s expected in groups" % login)
+            # All users part of the org?
+            for user in users:
+                login = user['login']
+                groups = data[login]
+                self.assertIn(u"github-%s" % self.organization,
+                              groups,
+                              "user %s expected to be in organization group" % login)
+                # and in the group exactly once?
+                occurrences = len([x for x in groups if x == u"github-%s" % self.organization])
+                self.assertEqual(occurrences, 1,
+                                 "user %s is expected once in organization group" % login)
+
+            # Users are in the groups where we expect them?
+            for user in users:
+                login = user['login']
+                groups = data[login]
+                if user in team1members:
+                    self.assertIn(u"github-%s-justice-league" % self.organization,
+                                  groups,
+                                  "user %s expected in justice-league group" % login)
+                else:
+                    self.assertNotIn(u"github-%s-justice-league" % self.organization,
+                                     groups,
+                                     "user %s not expected in justice-league group" % login)
+                if user in team12members:
+                    self.assertIn(u"github-%s-gentlepeople" % self.organization,
+                                  groups,
+                                  "user %s expected in gentlepeople group" % login)
+                else:
+                    self.assertNotIn(u"github-%s-gentlepeople" % self.organization,
+                                     groups,
+                                     "user %s not expected in gentlepeople group" % login)
+
+            # Any unexpected groups?
+            allgroups = (u"github-%s" % self.organization,
+                         u"github-%s-gentlepeople" % self.organization,
+                         u"github-%s-justice-league" % self.organization)
+            for user in users:
+                login = user['login']
+                for group in data[login]:
+                    self.assertIn(group, allgroups,
+                                  "Unexpected group found for user %s" % login)
+
+            # Any unexpected users?
+            allusers = [x["login"] for x in users]
+            for login in data.keys():
+                self.assertIn(login, allusers, "Unexpected user found in result")
+
+    def test_007_hook_get_request(self):
+        """
+        Test that a GET request to /github-groups/? prints a message and returns HTTP 405.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env):
+            response = requests.get(URL + '/github-groups', allow_redirects=False)
+            self.assertEqual(response.status_code, 405,
+                             "GET /github-groups did not return HTTP 405")
+            self.assertEqual(response.text,
+                             "Endpoint is ready to accept GitHub Organization membership notifications.\n")
+            response = requests.get(URL + '/github-groups/', allow_redirects=False)
+            self.assertEqual(response.status_code, 405,
+                             "/github-groups/ did not return 405")
+            self.assertEqual(response.text,
+                             "Endpoint is ready to accept GitHub Organization membership notifications.\n")
+
+    def test_008_hook_unsupported_event(self):
+        """
+        Test that unsupported events sent to /github-groups/ are handled correctly.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env):
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'FooEvent'})
+            self.assertEqual(response.status_code, 400,
+                             "Sending an unsupported event should return HTTP 400")
+            self.assertEqual(response.text, "Event type FooEvent is not supported\n")
+
+    def test_009_hook_ping_event(self):
+        """
+        Test that a ping event sent to /github-groups/ is handled correctly.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env):
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'ping'},
+                                     json={'zen': 'Echo me!'})
+            self.assertEqual(response.status_code, 200,
+                             "Ping event should return HTTP 200")
+            self.assertEqual(response.text, "Echo me!")
+
+    def test_010_hook_ping_event_nonjson_payload(self):
+        """
+        Test that a ping event with non-JSON payload sent to /github-groups/ does not crash the service.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env):
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'ping'},
+                                     data="Fail to parse as JSON")
+            self.assertEqual(response.status_code, 400,
+                             "Invalid payloads should return HTTP 400")
+            self.assertEqual(response.text, "Invalid payload\n")
+
+    def test_011_hook_ping_event_invalid_json_payload(self):
+        """
+        Test that a ping event without the expected JSON fields sent to /github-groups/ does not crash the service.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env):
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'ping'},
+                                     json=[{'bar': 'baz'}])
+            self.assertEqual(response.status_code, 500,
+                             "Invalid payloads should return HTTP 500")
+            self.assertIn("Exception occurred while handling payload, possible invalid payload\n", response.text)
+            self.assertIn("Traceback (most recent call last):", response.text)
+
+    def test_012_hook_membership_event_delete_team(self):
+        """
+        Test that deleting a team with an event sent to /github-groups/ works.
+        """
+        users = [
+            {"login": u"octocat"},
+            {"login": u"octobird"},
+            {"login": u"octodolphin"},
+            {"login": u"octofox"}
+        ]
+        team1members = [
+            users[0],
+            users[1],
+            users[2]
+        ]
+        team12members = [
+            users[0],
+            users[2],
+            users[3]
+        ]
+
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: [
+                {
+                    "id": 1,
+                    "name": u"Justice League",
+                    "slug": u"justice-league"
+                },
+                {
+                    "id": 12,
+                    "name": u"The League of Extraordinary Gentlemen and Gentlewomen",
+                    "slug": u"gentlepeople"
+                }
+            ],
+            '/teams/1/members': team1members,
+            '/teams/12/members': team12members
+        })
+
+        update = {
+            "team": {
+                "id": 1,
+                "name": u"Justice League",
+                "deleted": True
+            }
+        }
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            # Make sure the to-be-removed group exists
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200)
+
+            data = response.json()
+            allgroups = set()
+            for groups in data.values():
+                allgroups.update(groups)
+            self.assertIn(u"github-%s-justice-league" % self.organization, allgroups,
+                          "Group to be removed not found in group output, test will be meaningless.")
+
+            # Change the Mock API output
+            self.updateMockData(answers={
+                '/orgs/%s/teams' % self.organization: [
+                    {
+                        "id": 12,
+                        "name": u"The League of Extraordinary Gentlemen and Gentlewomen",
+                        "slug": u"gentlepeople"
+                    }
+                ],
+                '/teams/12/members': team12members
+            })
+
+            # Send the delete event
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'membership'},
+                                     json=update)
+            self.assertEqual(response.status_code, 200,
+                             "MembershipEvent handling should return HTTP 200")
+            self.assertEqual(response.text, "success")
+
+            # Check that the group is gone
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200)
+
+            data = response.json()
+            self.assertGreater(len(data), 0, "No groups returned after update")
+            for login in data:
+                groups = data[login]
+                self.assertNotIn(u"github-%s-justice-league" % self.organization,
+                                 groups,
+                                 "Deleted group still shows up for user %s" % login)
+            self.assertNotIn(users[1]["login"], data,
+                             "user %s should have been removed completely, but is still present" % users[1]["login"])
+
+    def test_013_hook_membership_event_delete_nonexistant_team(self):
+        """
+        Test that a membership event that deletes a non-existant team does not crash anything.
+        """
+
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        update = {
+            "team": {
+                "id": 1,
+                "name": u"Justice League",
+                "deleted": True
+            }
+        }
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            # Send the delete event
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'membership'},
+                                     json=update)
+            self.assertEqual(response.status_code, 200,
+                             "Deleting non-existant teams should return HTTP 200")
+            self.assertEqual(response.text, "success")
+
+    def test_014_hook_membership_event_add_team(self):
+        """
+        Test that adding a team with a MembershipEvent works as expected.
+        """
+
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        update = {
+            "team": {
+                "id": 1,
+                "name": u"Justice League",
+                "slug": u"justice-league"
+            }
+        }
+
+        users = [
+            {"login": u"octocat"},
+        ]
+        team1members = [users[0]]
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            # Update the API result
+            self.updateMockData(retcode=200, answers={
+                '/orgs/%s/teams' % self.organization: [
+                    {
+                        "id": 1,
+                        "name": u"Justice League",
+                        "slug": u"justice-league"
+                    },
+                ],
+                '/teams/1/members': team1members,
+            })
+
+            # Send the update event
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'membership'},
+                                     json=update)
+            self.assertEqual(response.status_code, 200,
+                             "Adding members to non-existant teams should return HTTP 200")
+            self.assertEqual(response.text, "success")
+
+            # Check that the member and group were added
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200)
+
+            data = response.json()
+            self.assertGreater(len(data), 0, "No groups returned after update")
+            self.assertIn(users[0]["login"], data,
+                          "User %s expected after update, but not present" % users[0]["login"])
+            self.assertItemsEqual(
+                data[users[0]["login"]],
+                (u"github-%s-justice-league" % self.organization, u"github-%s" % self.organization),
+                "User %s does not have expected groups after update" % users[0]["login"])
+
+    def test_015_hook_membership_event_add_member(self):
+        """
+        Test that adding a user to an existing team with a MembershipEvent works.
+        """
+        users = [
+            {"login": u"octocat"},
+            {"login": u"octofox"},
+        ]
+        team1members = [users[0]]
+
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: [
+                {
+                    "id": 1,
+                    "name": u"Justice League",
+                    "slug": u"justice-league"
+                },
+            ],
+            '/teams/1/members': list(team1members)
+        })
+
+        update = {
+            "team": {
+                "id": 1,
+                "name": u"Justice League",
+                "slug": u"justice-league"
+            }
+        }
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            # Update the API result
+            team1members.append(users[1])
+            self.updateMockData(retcode=200, answers={
+                '/orgs/%s/teams' % self.organization: [
+                    {
+                        "id": 1,
+                        "name": u"Justice League",
+                        "slug": u"justice-league"
+                    },
+                ],
+                '/teams/1/members': list(team1members)
+            })
+
+            # Send the update event
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'membership'},
+                                     json=update)
+            self.assertEqual(response.status_code, 200,
+                             "Adding members to existing teams should return HTTP 200")
+            self.assertEqual(response.text, "success")
+
+            # Check that the member and group were added
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200)
+
+            data = response.json()
+            self.assertGreater(len(data), 0, "No groups returned after update")
+            self.assertIn(users[1]["login"], data,
+                          "User %s expected after update, but not present" % users[1]["login"])
+            self.assertItemsEqual(
+                data[users[1]["login"]],
+                (u"github-%s-justice-league" % self.organization, u"github-%s" % self.organization),
+                "User %s does not have expected groups after update" % users[1]["login"])
+
+    def test_016_hook_membership_event_remove_member(self):
+        """
+        Test that removing a member from an existing team using a MembershipEvent works.
+        """
+        users = [
+            {"login": u"octocat"},
+            {"login": u"octofox"},
+        ]
+        team1members = [users[0], users[1]]
+
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: [
+                {
+                    "id": 1,
+                    "name": u"Justice League",
+                    "slug": u"justice-league"
+                },
+            ],
+            '/teams/1/members': list(team1members)
+        })
+
+        update = {
+            "team": {
+                "id": 1,
+                "name": u"Justice League",
+                "slug": u"justice-league"
+            }
+        }
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            # Update the API result
+            team1members.remove(users[1])
+            self.updateMockData(retcode=200, answers={
+                '/orgs/%s/teams' % self.organization: [
+                    {
+                        "id": 1,
+                        "name": u"Justice League",
+                        "slug": u"justice-league"
+                    },
+                ],
+                '/teams/1/members': list(team1members)
+            })
+
+            # Send the update event
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'membership'},
+                                     json=update)
+            self.assertEqual(response.status_code, 200,
+                             "Removing members from existing teams should return HTTP 200")
+            self.assertEqual(response.text, "success")
+
+            # Check that the member and group were added
+            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            self.assertEqual(response.status_code, 200)
+
+            data = response.json()
+            self.assertGreater(len(data), 0, "No groups returned after update")
+            self.assertNotIn(users[1]["login"], data,
+                             "User %s not expected after update, but present" % users[1]["login"])
+
+    def test_017_hook_unsigned_ping_event(self):
+        """
+        Test that an unsigned event sent to /github-groups/ is rejected if a webhook secret was configured.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env_secured):
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'ping'},
+                                     json={'zen': 'Echo me!'})
+            self.assertEqual(response.status_code, 403,
+                             "Unsigned ping event should return HTTP 403")
+            self.assertEqual(response.text, "Webhook signature verification failed\n")
+
+    def test_018_hook_unsupported_sig_algo_ping_event(self):
+        """
+        Test that an event sent to /github-groups/ with an unsupported signature algorithm is rejected if a webhook secret was configured.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env_secured):
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={
+                                         'X-GitHub-Event': 'ping',
+                                         'X-Hub-Signature': 'foofoo=barbar'
+                                     },
+                                     json={'zen': 'Echo me!'})
+            self.assertEqual(response.status_code, 403,
+                             "Ping event with invalid signature algorithm should return HTTP 403")
+            self.assertEqual(response.text, "Webhook signature verification failed\n")
+
+    def test_019_hook_invalid_sig_ping_event(self):
+        """
+        Test that an event sent to /github-groups/ with an invalid signature is rejected if a webhook secret was configured.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env_secured):
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={
+                                         'X-GitHub-Event': 'ping',
+                                         'X-Hub-Signature': 'sha1=f1d2d2f924e986ac86fdf7b36c94bcdf32beec15'
+                                     },
+                                     json={'zen': 'Echo me!'})
+            self.assertEqual(response.status_code, 403,
+                             "Ping event with invalid signature should return HTTP 403")
+            self.assertEqual(response.text, "Webhook signature verification failed\n")
+
+    def test_020_hook_signed_ping_event(self):
+        """
+        Test that a correctly signed ping event sent to /github-groups/ is accepted if a webhook secret was configured.
+        """
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        with TracContext(self, env=self.tracd_env, **self.trac_env_secured):
+            # Correct signature can be generated with OpenSSL:
+            #  $> printf '{"zen": "Echo me"}\n' | openssl dgst -sha256 -hmac $webhook_secret
+            signature = "sha256=cacc93c2df1b21313e16d8690fc21e56229b6a9525e7016db38bdf9bad708fed"
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={
+                                         'X-GitHub-Event': 'ping',
+                                         'X-Hub-Signature': signature
+                                     },
+                                     data='{"zen": "Echo me"}\n')
+            self.assertEqual(response.status_code, 200,
+                             "Ping event with valid signature should return HTTP 200")
+            self.assertEqual(response.text, "Echo me")
+
+    def test_021_hook_membership_event_api_failure(self):
+        """
+        Test that a failing API after a membership event was sent correctly returns a failure state.
+        """
+
+        self.updateMockData(retcode=200, answers={
+            '/orgs/%s/teams' % self.organization: []
+        })
+
+        update = {
+            "team": {
+                "id": 1,
+                "name": u"Justice League",
+                "deleted": True
+            }
+        }
+
+        with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
+            # Change the mock to always fail
+            self.updateMockData(retcode=403)
+            # Send the delete event
+            response = requests.post(URL + '/github-groups',
+                                     allow_redirects=False,
+                                     headers={'X-GitHub-Event': 'membership'},
+                                     json=update)
+            self.assertEqual(response.status_code, 500,
+                             "Sending a membership event with broken API backend should return HTTP 500")
+            self.assertEqual(response.text, "failure")
 
 
 if __name__ == '__main__':
