@@ -69,6 +69,10 @@ class GitHubLoginModule(LoginModule):
         req.redirect(authorization_url)
 
     def _do_oauth(self, req):
+        session_oauth_state = req.session.get('oauth_state')
+        get_state = req.args.get('state')
+        if session_oauth_state != get_state:
+            self._reject(req, 'oauth state mismatch %s != %s' % (session_oauth_state, get_state))
         oauth = self._oauth_session(req)
         authorization_response = req.abs_href(req.path_info) + '?' + req.query_string
         client_secret = self._client_config('secret')
@@ -79,9 +83,7 @@ class GitHubLoginModule(LoginModule):
                 authorization_response=authorization_response,
                 client_secret=client_secret)
         except oauthlib.oauth2.MissingTokenError, e:
-            self.log.warn(e)
-            add_warning(req, _("Invalid request. Please try to login again."))
-            self._redirect_back(req)
+            self._reject(req, e)
 
         user = oauth.get('https://api.github.com/user').json()
         # Small hack to pass the username to _do_login.
@@ -89,8 +91,15 @@ class GitHubLoginModule(LoginModule):
         # Save other available values in the session.
         req.session.setdefault('name', user.get('name') or '')
         req.session.setdefault('email', user.get('email') or '')
-
         return super(GitHubLoginModule, self)._do_login(req)
+        
+    def _do_logout(self, req):
+        req.session.pop('oauth_state', None)
+        super(GitHubLoginModule, self)._do_logout(req)
+    def _reject(self, req, e):
+        self.log.warn(e)
+        add_warning(req, _("Invalid request. Please try to login again."))
+        self._redirect_back(req)
 
     def _oauth_session(self, req):
         client_id = self._client_config('id')
