@@ -91,9 +91,11 @@ class GitHubLoginModule(LoginModule):
         # Save other available values in the session.
         req.session.setdefault('name', user.get('name') or '')
         req.session.setdefault('email', user.get('email') or '')
+        return super(GitHubLoginModule, self)._do_login(req)
+        
     def _do_logout(self, req):
         req.session.pop('oauth_state', None)
-        super(GitHubLoginModule, self)._do_login(req)
+        super(GitHubLoginModule, self)._do_logout(req)
     def _reject(self, req, e):
         self.log.warn(e)
         add_warning(req, _("Invalid request. Please try to login again."))
