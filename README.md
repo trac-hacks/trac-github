@@ -339,6 +339,10 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 Changelog
 ---------
 
+### 2.2
+
+* CSRF security fix: add verification of OAuth state parameter.
+
 ### 2.1.5
 
 * Support reading the GitHub OAuth secret from a file.

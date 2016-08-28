@@ -17,9 +17,13 @@ import sys
 import time
 import unittest
 import urllib2
+import urlparse
 
 from trac.env import Environment
 from trac.ticket.model import Ticket
+from trac.util.translation import _
+
+import requests
 
 
 GIT = 'test-git-foo'
@@ -103,6 +107,8 @@ class TracGitHubTests(unittest.TestCase):
             conf.set('git', 'persistent_cache', 'true')
 
         conf.add_section('github')
+        conf.set('github', 'client_id', '01234567890123456789')
+        conf.set('github', 'client_secret', '0123456789abcdef0123456789abcdef012345678')
         conf.set('github', 'repository', 'aaugustin/trac-github')
         conf.set('github', 'alt.repository', 'follower/trac-github')
         conf.set('github', 'alt.branches', 'master stable/*')
@@ -268,6 +274,74 @@ class GitHubBrowserTests(TracGitHubTests):
         self.assertTrue('msg 4' in html)
         self.assertTrue('msg 5' in html)
         self.assertFalse('msg 6' in html)
+
+
+class GitHubLoginModuleTests(TracGitHubTests):
+
+    @classmethod
+    def startTracd(cls, **kwargs):
+        # Disable check for HTTPS to avoid adding complexity to the test setup.
+        kwargs['env'] = os.environ.copy()
+        kwargs['env']['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+        super(GitHubLoginModuleTests, cls).startTracd(**kwargs)
+
+    def testLogin(self):
+        response = requests.get(URL + 'github/login', allow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+
+        redirect_url = urlparse.urlparse(response.headers['Location'])
+        self.assertEqual(redirect_url.scheme, 'https')
+        self.assertEqual(redirect_url.netloc, 'github.com')
+        self.assertEqual(redirect_url.path, '/login/oauth/authorize')
+        params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
+        state = params['state'][0]  # this is a random value
+        self.assertEqual(params, {
+            'client_id': ['01234567890123456789'],
+            'redirect_uri': [URL + 'github/oauth'],
+            'response_type': ['code'],
+            'scope': [''],
+            'state': [state],
+        })
+
+    def testOauthInvalidState(self):
+        session = requests.Session()
+
+        # This adds a oauth_state parameter in the Trac session.
+        response = session.get(URL + 'github/login', allow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+
+        response = session.get(
+            URL + 'github/oauth?code=01234567890123456789&state=wrong_state',
+            allow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers['Location'], URL[:-1])
+
+        response = session.get(URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            _("Invalid request. Please try to login again."), response.text)
+
+    def testOauthInvalidStateWithoutSession(self):
+        session = requests.Session()
+
+        # There's no oauth_state parameter in the Trac session.
+        # OAuth callback requests without state must still fail.
+
+        response = session.get(
+            URL + 'github/oauth?code=01234567890123456789',
+            allow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers['Location'], URL[:-1])
+
+        response = session.get(URL)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            _("Invalid request. Please try to login again."), response.text)
+
+    def testLogout(self):
+        response = requests.get(URL + 'github/logout', allow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.headers['Location'], URL[:-1])
 
 
 class GitHubPostCommitHookTests(TracGitHubTests):
