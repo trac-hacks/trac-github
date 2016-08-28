@@ -128,7 +128,7 @@ class TracGitHubTests(unittest.TestCase):
         shutil.rmtree(ENV)
 
     @classmethod
-    def startTracd(cls):
+    def startTracd(cls, **kwargs):
         if COVERAGE:
             tracd = ['coverage', 'run', '--append', '--branch',
                      '--source=tracext.github',
@@ -137,9 +137,8 @@ class TracGitHubTests(unittest.TestCase):
         else:
             tracd = ['tracd']
         if SHOW_LOG:
-            kwargs = {}
-        else:
-            kwargs = dict(stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            kwargs['stdout'] = sys.stdout
+            kwargs['stderr'] = sys.stderr
         cls.tracd = subprocess.Popen(tracd + ['--port', '8765', ENV], **kwargs)
 
         while True:
