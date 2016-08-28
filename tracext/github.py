@@ -78,8 +78,8 @@ class GitHubLoginModule(LoginModule):
                 'https://github.com/login/oauth/access_token',
                 authorization_response=authorization_response,
                 client_secret=client_secret)
-        except oauthlib.oauth2.MissingTokenError, e:
-            self.log.warn(e)
+        except oauthlib.oauth2.OAuth2Error as exc:
+            self.log.warn(exc)
             add_warning(req, _("Invalid request. Please try to login again."))
             self._redirect_back(req)
 
@@ -92,12 +92,20 @@ class GitHubLoginModule(LoginModule):
 
         return super(GitHubLoginModule, self)._do_login(req)
 
+    def _do_logout(self, req):
+        req.session.pop('oauth_state', None)
+        super(GitHubLoginModule, self)._do_logout(req)
+
     def _oauth_session(self, req):
         client_id = self._client_config('id')
         redirect_uri = req.abs_href.github('oauth')
         # Inner import to avoid a hard dependency on requests-oauthlib.
         from requests_oauthlib import OAuth2Session
-        return OAuth2Session(client_id, redirect_uri=redirect_uri, scope=[''])
+        return OAuth2Session(
+            client_id,
+            scope=[''],
+            redirect_uri=redirect_uri,
+            state=req.session.get('oauth_state'))
 
     def _client_config(self, key):
         assert key in ('id', 'secret')
