@@ -31,7 +31,7 @@ ALTGIT = 'test-git-bar'
 
 ENV = 'test-trac-github'
 CONF = '%s/conf/trac.ini' % ENV
-URL = 'http://localhost:8765/%s/' % ENV
+URL = 'http://localhost:8765/%s' % ENV
 HEADERS = {'Content-Type': 'application/json', 'X-GitHub-Event': 'push'}
 
 COVERAGE = False
@@ -182,7 +182,7 @@ class TracGitHubTests(unittest.TestCase):
     def openGitHubHook(n=1, reponame=''):
         # See https://developer.github.com/v3/activity/events/types/#pushevent
         # We don't reproduce the entire payload, only what the plugin needs.
-        url = (URL + 'github/' + reponame) if reponame else URL + 'github'
+        url = (URL + '/github/' + reponame) if reponame else URL + '/github'
         repo = {'': GIT, 'alt': ALTGIT}[reponame]
 
         commits = []
@@ -202,7 +202,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(GIT, 'myfile', 'for browser tests')
         changeset = self.openGitHubHook().read().rstrip()[-40:]
         try:
-            urllib2.urlopen(URL + 'changeset/' + changeset)
+            urllib2.urlopen(URL + '/changeset/' + changeset)
         except urllib2.HTTPError as exc:
             self.assertEqual(exc.code, 302)
             self.assertEqual(exc.headers['Location'],
@@ -214,7 +214,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'myfile', 'for browser tests')
         changeset = self.openGitHubHook(1, 'alt').read().rstrip()[-40:]
         try:
-            urllib2.urlopen(URL + 'changeset/' + changeset + '/alt')
+            urllib2.urlopen(URL + '/changeset/' + changeset + '/alt')
         except urllib2.HTTPError as exc:
             self.assertEqual(exc.code, 302)
             self.assertEqual(exc.headers['Location'],
@@ -226,7 +226,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(GIT, 'myfile', 'for more browser tests')
         changeset = self.openGitHubHook().read().rstrip()[-40:]
         try:
-            urllib2.urlopen(URL + 'changeset/' + changeset + '/myfile')
+            urllib2.urlopen(URL + '/changeset/' + changeset + '/myfile')
         except urllib2.HTTPError as exc:
             self.assertEqual(exc.code, 302)
             self.assertEqual(exc.headers['Location'],
@@ -238,7 +238,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'myfile', 'for more browser tests')
         changeset = self.openGitHubHook(1, 'alt').read().rstrip()[-40:]
         try:
-            urllib2.urlopen(URL + 'changeset/' + changeset + '/alt/myfile')
+            urllib2.urlopen(URL + '/changeset/' + changeset + '/alt/myfile')
         except urllib2.HTTPError as exc:
             self.assertEqual(exc.code, 302)
             self.assertEqual(exc.headers['Location'],
@@ -248,11 +248,11 @@ class GitHubBrowserTests(TracGitHubTests):
 
     def testBadChangeset(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
-            urllib2.urlopen(URL + 'changeset/1234567890')
+            urllib2.urlopen(URL + '/changeset/1234567890')
 
     def testBadUrl(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
-            urllib2.urlopen(URL + 'changesetnosuchurl')
+            urllib2.urlopen(URL + '/changesetnosuchurl')
 
     def testTimelineFiltering(self):
         self.makeGitBranch(GIT, 'stable/2.0')
@@ -267,7 +267,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'myfile', 'timeline 6\n', 'msg 6', 'unstable/2.0')
         self.openGitHubHook(3)
         self.openGitHubHook(3, 'alt')
-        html = urllib2.urlopen(URL + 'timeline').read()
+        html = urllib2.urlopen(URL + '/timeline').read()
         self.assertTrue('msg 1' in html)
         self.assertTrue('msg 2' in html)
         self.assertTrue('msg 3' in html)
@@ -286,7 +286,7 @@ class GitHubLoginModuleTests(TracGitHubTests):
         super(GitHubLoginModuleTests, cls).startTracd(**kwargs)
 
     def testLogin(self):
-        response = requests.get(URL + 'github/login', allow_redirects=False)
+        response = requests.get(URL + '/github/login', allow_redirects=False)
         self.assertEqual(response.status_code, 302)
 
         redirect_url = urlparse.urlparse(response.headers['Location'])
@@ -297,7 +297,7 @@ class GitHubLoginModuleTests(TracGitHubTests):
         state = params['state'][0]  # this is a random value
         self.assertEqual(params, {
             'client_id': ['01234567890123456789'],
-            'redirect_uri': [URL + 'github/oauth'],
+            'redirect_uri': [URL + '/github/oauth'],
             'response_type': ['code'],
             'scope': [''],
             'state': [state],
@@ -307,14 +307,14 @@ class GitHubLoginModuleTests(TracGitHubTests):
         session = requests.Session()
 
         # This adds a oauth_state parameter in the Trac session.
-        response = session.get(URL + 'github/login', allow_redirects=False)
+        response = session.get(URL + '/github/login', allow_redirects=False)
         self.assertEqual(response.status_code, 302)
 
         response = session.get(
-            URL + 'github/oauth?code=01234567890123456789&state=wrong_state',
+            URL + '/github/oauth?code=01234567890123456789&state=wrong_state',
             allow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], URL[:-1])
+        self.assertEqual(response.headers['Location'], URL)
 
         response = session.get(URL)
         self.assertEqual(response.status_code, 200)
@@ -328,10 +328,10 @@ class GitHubLoginModuleTests(TracGitHubTests):
         # OAuth callback requests without state must still fail.
 
         response = session.get(
-            URL + 'github/oauth?code=01234567890123456789',
+            URL + '/github/oauth?code=01234567890123456789',
             allow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], URL[:-1])
+        self.assertEqual(response.headers['Location'], URL)
 
         response = session.get(URL)
         self.assertEqual(response.status_code, 200)
@@ -339,9 +339,9 @@ class GitHubLoginModuleTests(TracGitHubTests):
             _("Invalid request. Please try to login again."), response.text)
 
     def testLogout(self):
-        response = requests.get(URL + 'github/logout', allow_redirects=False)
+        response = requests.get(URL + '/github/logout', allow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], URL[:-1])
+        self.assertEqual(response.headers['Location'], URL)
 
 
 class GitHubPostCommitHookTests(TracGitHubTests):
@@ -391,7 +391,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         # Emulate self.openGitHubHook to use a non-existent commit id
         random_id = ''.join(random.choice('0123456789abcdef') for _ in range(40))
         payload = {'commits': [{'id': random_id, 'message': '', 'distinct': True}]}
-        request = urllib2.Request(URL + 'github', json.dumps(payload), HEADERS)
+        request = urllib2.Request(URL + '/github', json.dumps(payload), HEADERS)
         output = urllib2.urlopen(request).read()
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
@@ -461,32 +461,32 @@ class GitHubPostCommitHookTests(TracGitHubTests):
     def testPing(self):
         payload = {'zen': "Readability counts."}
         headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'ping'}
-        request = urllib2.Request(URL + 'github', json.dumps(payload), headers)
+        request = urllib2.Request(URL + '/github', json.dumps(payload), headers)
         output = urllib2.urlopen(request).read()
         self.assertEqual(output, "Readability counts.")
 
     def testUnknownEvent(self):
         headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'pull'}
-        request = urllib2.Request(URL + 'github', json.dumps({}), headers)
+        request = urllib2.Request(URL + '/github', json.dumps({}), headers)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
             urllib2.urlopen(request)
 
     def testBadMethod(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 405: Method Not Allowed$'):
-            urllib2.urlopen(URL + 'github')
+            urllib2.urlopen(URL + '/github')
 
     def testBadPayload(self):
-        request = urllib2.Request(URL + 'github', 'foobar', HEADERS)
+        request = urllib2.Request(URL + '/github', 'foobar', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
             urllib2.urlopen(request)
 
     def testBadRepository(self):
-        request = urllib2.Request(URL + 'github/nosuchrepo', '{}', HEADERS)
+        request = urllib2.Request(URL + '/github/nosuchrepo', '{}', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
             urllib2.urlopen(request)
 
     def testBadUrl(self):
-        request = urllib2.Request(URL + 'githubnosuchurl', '{}', HEADERS)
+        request = urllib2.Request(URL + '/githubnosuchurl', '{}', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
             urllib2.urlopen(request)
 
