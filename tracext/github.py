@@ -6,7 +6,7 @@ import re
 from genshi.builder import tag
 
 import trac
-from trac.config import ListOption, Option
+from trac.config import ListOption, BoolOption, Option
 from trac.core import Component, implements
 from trac.util.translation import _
 from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
@@ -17,6 +17,12 @@ from trac.web.chrome import add_warning
 
 
 class GitHubLoginModule(LoginModule):
+
+    request_email = BoolOption('github', 'request_email', 'false',
+            doc="Request access to the email address of the GitHub user.")
+
+    preferred_email_regex = Option('github', 'preferred_email_regex', '',
+            doc="Prefer email address matching this regex over the primary address.")
 
     # INavigationContributor methods
 
@@ -89,11 +95,24 @@ class GitHubLoginModule(LoginModule):
             self._reject_oauth(req, exc)
 
         user = oauth.get('https://api.github.com/user').json()
+        name = user.get('name')
+        email = user.get('email')
+        if self.request_email:
+            emails = oauth.get('https://api.github.com/user/emails').json()
+            pattern = re.compile(self.preferred_email_regex)
+            for item in emails:
+                if self.preferred_email_regex and pattern.match(item['email']):
+                        email = item['email']
+                        break
+                if item['primary']:
+                    email = item['email']
+                    if not self.preferred_email_regex:
+                        break
         # Small hack to pass the username to _do_login.
         req.environ['REMOTE_USER'] = user['login']
         # Save other available values in the session.
-        req.session.setdefault('name', user.get('name') or '')
-        req.session.setdefault('email', user.get('email') or '')
+        req.session.setdefault('name', name or '')
+        req.session.setdefault('email', email or '')
 
         return super(GitHubLoginModule, self)._do_login(req)
 
@@ -108,12 +127,15 @@ class GitHubLoginModule(LoginModule):
 
     def _oauth_session(self, req, state=None):
         client_id = self._client_config('id')
+        scope = ['']
+        if self.request_email:
+            scope = ['user:email']
         redirect_uri = req.abs_href.github('oauth')
         # Inner import to avoid a hard dependency on requests-oauthlib.
         from requests_oauthlib import OAuth2Session
         return OAuth2Session(
             client_id,
-            scope=[''],
+            scope=scope,
             redirect_uri=redirect_uri,
             state=state,
         )
