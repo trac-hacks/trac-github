@@ -16,5 +16,6 @@ setup(
         'github.browser = tracext.github:GitHubBrowser',
         'github.loginmodule = tracext.github:GitHubLoginModule[oauth]',
         'github.postcommithook = tracext.github:GitHubPostCommitHook',
+        'github.groups = tracext.github:GitHubGroupsProvider',
     ]},
 )

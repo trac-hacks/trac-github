@@ -10,6 +10,7 @@ This Trac plugin performs three functions:
    notify the new changesets to Trac;
 2. authenticate users with their GitHub account;
 3. direct changeset TracLinks to GitHub's repository browser.
+4. sync GitHub teams to Trac permission groups
 
 The notification of new changesets is strictly equivalent to the command
 described in Trac's setup guide:
@@ -181,6 +182,76 @@ To enable it, edit `trac.ini` as follows:
 Since it replaces standard URLs of Trac, you must disable three components in
 `trac.versioncontrol.web_ui`, as shown above.
 
+### Group Synchronization
+
+GitHub teams can be synced to Trac permission groups using
+**`tracext.github.GitHubGroupsProvider`**. It uses a dedicated GitHub user and
+their personal access token to synchronize group memberships. Note that this
+user must have permission to read all your organization's teams. Additionally,
+this module implements a Webhook endpoint to keep the groups synchronized at
+all times.
+
+Register a new user for the synchronization or re-use an existing bot user.
+Make sure the bot user has owner privileges for your organization. Go to
+*Settings* > *Developer settings* > *Personal access tokens* and click
+*Generate a new token*. Make sure `read:org` under `admin:org` is checked and
+submit. Copy the displayed hex string.
+
+Now edit edit `trac.ini` as follows:
+
+    [components]
+    tracext.github.GitHubGroupsProvider = enabled
+
+    [github]
+	organization = <your organization name>
+	username = <your sync user's username>
+	access_token = <paste the generated access token>
+
+This should give you an initial working synchronization of your organization's
+teams, but no automatic update. Because the cache does not expire, restarting
+trac is your only option to force a resync. If the synchronization does not
+work as expected, enable debug logging in Trac and check the logfile.
+
+Next, you should configure a Webhook to keep your groups up to date. Browse to
+the home page of your project in Trac and append `/github-groups` to the URL.
+You should see the following message:
+
+    Endpoint is ready to accept GitHub Organization membership notifications.
+
+This is the URL of the endpoint.
+
+Log in as an organization owner and find the *Webhooks* panel in the
+organization's settings. Add a new webhook and use the endpoint URL in the
+*Payload URL* field. Use `application/json` as *Content type*. Leave the secret
+empty for now, and select *Membership* from the list of individual events.
+Disable the *Push* event, since this endpoint will not handle it. Add the
+webhook, open it and check the list of recent deliveries. It should have sent
+a successful ping event.
+
+Finally, you should secure your webhook. Generate a random shared secret, for
+example using `/dev/urandom` and a hash algorithm:
+
+    dd if=/dev/urandom of=/dev/stdout bs=16 count=16 | openssl dgst -sha256
+
+Copy the secret, edit `trac.ini` and add
+
+    [github]
+	webhook_secret = <paste the generated secret>
+
+Go to your webook's settings on GitHub again and paste the secret in the
+*Secret* field. After saving, select the ping event from the recent deliveries
+list and click *Redeliver* to make sure the shared secret works.
+
+The synchronized groups will be named `github-${orgname}-${team_slug}`, e.g.
+for the *extraordinary league* team of the *people* organization, the group in
+Trac will be named `github-people-extraordinary-league`.
+
+An additional `github-${orgname}` group will contain all members of all teams
+in your organization. Note that members of your organization that are not part
+of a team will not be part of this group. This limitation is necessary because
+GitHub does not (yet) provide a notification mechanism for changes in
+organization membership.
+
 Advanced setup
 --------------
 
@@ -338,6 +409,10 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 
 Changelog
 ---------
+
+### master
+
+* Support synchronizing GitHub teams to Trac permission groups.
 
 ### 2.2
 
