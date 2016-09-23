@@ -114,14 +114,20 @@ class GitHubLoginModule(LoginModule):
                 req, exc,
                 reason=_("An error occurred while communicating with the GitHub API"))
         if self.request_email:
-            emails = oauth.get(github_api_url + 'user/emails').json()
-            for item in emails:
-                if not item['verified']:
-                    # ignore unverified email addresses
-                    continue
-                if item['primary']:
-                    email = item['email']
-                    break
+            try:
+                emails = oauth.get(github_api_url + 'user/emails').json()
+                for item in emails:
+                    if not item['verified']:
+                        # ignore unverified email addresses
+                        continue
+                    if item['primary']:
+                        email = item['email']
+                        break
+            except Exception as exc: # pylint: disable=broad-except
+                self._reject_oauth(
+                    req, exc,
+                    reason=_("An error occurred while retrieving your email address "
+                             "from the GitHub API"))
         # Small hack to pass the username to _do_login.
         req.environ['REMOTE_USER'] = login
         # Save other available values in the session.
