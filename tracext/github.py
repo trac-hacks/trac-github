@@ -92,6 +92,7 @@ class GitHubLoginModule(LoginModule):
         client_secret = self._client_config('secret')
         # Inner import to avoid a hard dependency on requests-oauthlib.
         import oauthlib
+        import requests
         github_oauth_url = os.environ.get("TRAC_GITHUB_OAUTH_URL", "https://github.com/")
         github_api_url = os.environ.get("TRAC_GITHUB_API_URL", "https://api.github.com/")
         try:
@@ -99,7 +100,7 @@ class GitHubLoginModule(LoginModule):
                 github_oauth_url + 'login/oauth/access_token',
                 authorization_response=authorization_response,
                 client_secret=client_secret)
-        except oauthlib.oauth2.OAuth2Error as exc:
+        except (oauthlib.oauth2.OAuth2Error, requests.exceptions.ConnectionError) as exc:
             self._reject_oauth(req, exc)
 
         user = oauth.get(github_api_url + 'user').json()
