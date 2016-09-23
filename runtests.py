@@ -17,9 +17,12 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 import unittest
 import urllib2
 import urlparse
+
+from lxml import html
 
 from trac.env import Environment
 from trac.ticket.model import Ticket
@@ -117,6 +120,8 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('github', 'repository', 'aaugustin/trac-github')
         conf.set('github', 'alt.repository', 'follower/trac-github')
         conf.set('github', 'alt.branches', 'master stable/*')
+        if 'request_email' in kwargs:
+            conf.set('github', 'request_email', kwargs['request_email'])
         if 'organization' in kwargs:
             conf.set('github', 'organization', kwargs['organization'])
         if 'username' in kwargs and 'access_token' in kwargs:
@@ -360,6 +365,240 @@ class GitHubLoginModuleTests(TracGitHubTests):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers['Location'], URL)
 
+class GitHubLoginModuleConfigurationTests(TracGitHubTests):
+    # Append custom failure messages to the automatically generated ones
+    longMessage = True
+
+    @classmethod
+    def setUpClass(cls):
+        cls.createGitRepositories()
+        cls.mockdata = startAPIMock(8768)
+
+        trac_env = os.environ.copy()
+        trac_env.update({
+            'TRAC_GITHUB_OAUTH_URL': 'http://127.0.0.1:8768/',
+            'TRAC_GITHUB_API_URL': 'http://127.0.0.1:8768/',
+            'OAUTHLIB_INSECURE_TRANSPORT': '1'
+        })
+        trac_env_broken = trac_env.copy()
+        trac_env_broken.update({
+            'TRAC_GITHUB_OAUTH_URL': 'http://127.0.0.1:8769/',
+            'TRAC_GITHUB_API_URL': 'http://127.0.0.1:8769/',
+        })
+        trac_env_broken_api = trac_env.copy()
+        trac_env_broken_api.update({
+            'TRAC_GITHUB_API_URL': 'http://127.0.0.1:8769/',
+        })
+
+        cls.trac_env = trac_env
+        cls.trac_env_broken = trac_env_broken
+        cls.trac_env_broken_api = trac_env_broken_api
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.removeGitRepositories()
+
+    def testLoginWithReqEmail(self):
+        """Test that configuring request_email = true requests the user:email scope from GitHub"""
+        with TracContext(self, request_email=True):
+            response = requests.get(URL + '/github/login', allow_redirects=False)
+            self.assertEqual(response.status_code, 302)
+
+            redirect_url = urlparse.urlparse(response.headers['Location'])
+            self.assertEqual(redirect_url.scheme, 'https')
+            self.assertEqual(redirect_url.netloc, 'github.com')
+            self.assertEqual(redirect_url.path, '/login/oauth/authorize')
+            params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
+            state = params['state'][0]  # this is a random value
+            self.assertEqual(params, {
+                'client_id': ['01234567890123456789'],
+                'redirect_uri': [URL + '/github/oauth'],
+                'response_type': ['code'],
+                'scope': ['user:email'],
+                'state': [state],
+            })
+
+    def attemptValidOauth(self, testenv, callback, **kwargs):
+        """
+        Helper method that runs a valid OAuth2 attempt in the given testenv
+        with the given callback; returns a tuple where the first item is the
+        error message in the notification box on the trac page loaded after the
+        login attempt (or an empty string on success) and the second item is
+        a list of email addresses found in email fields of the preferences
+        after login.
+        """
+        ctxt_kwargs = {}
+        other_kwargs = {}
+        for kwarg in kwargs:
+            if kwarg in TracContext._valid_attrs:
+                ctxt_kwargs[kwarg] = kwargs[kwarg]
+            else:
+                other_kwargs[kwarg] = kwargs[kwarg]
+        with TracContext(self, env=testenv, **ctxt_kwargs):
+            updateMockData(self.mockdata, postcallback=callback, **other_kwargs)
+            try:
+                session = requests.Session()
+
+                # This adds a oauth_state parameter in the Trac session.
+                response = session.get(URL + '/github/login', allow_redirects=False)
+                self.assertEqual(response.status_code, 302)
+
+                # Extract the state from the redirect
+                redirect_url = urlparse.urlparse(response.headers['Location'])
+                params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
+                state = params['state'][0]  # this is a random value
+                response = session.get(
+                    URL + '/github/oauth',
+                    params={
+                        'code': '01234567890123456789',
+                        'state': state
+                    },
+                    allow_redirects=False)
+                self.assertEqual(response.status_code, 302)
+
+                response = session.get(URL + '/prefs')
+                self.assertEqual(response.status_code, 200)
+                tree = html.fromstring(response.content)
+                return (''.join(tree.xpath('//div[@id="warning"]/text()')).strip(),
+                        tree.xpath('//input[@id="email"]/@value'))
+            finally:
+                # disable callback again
+                updateMockData(self.mockdata, postcallback="")
+
+    def testOauthBackendUnavailable(self):
+        """
+        Test that an OAuth backend that resets the connection does not crash
+        the login
+        """
+        errmsg, emails = self.attemptValidOauth(self.trac_env_broken, "")
+        self.assertIn(
+            _("Invalid request. Please try to login again."),
+            errmsg,
+            "OAuth Authorization Request with unavailable backend should not succeed.")
+
+    def testOauthBackendFails(self):
+        """Test that an OAuth backend that fails does not crash the login"""
+        def cb(path, args):
+            return 403, {}
+        errmsg, emails = self.attemptValidOauth(self.trac_env, cb)
+        self.assertIn(
+            _("Invalid request. Please try to login again."),
+            errmsg,
+            "OAuth Authorization Request with failing backend should not succeed.")
+
+    def oauthCallbackSuccess(self, path, args):
+        """
+        GitHubAPIMock POST callback that contains a successful OAuth
+        Authentication Response
+        """
+        return 200, {
+            'access_token': '190c20e9d87de41264749672ccacdd63a0ae2345a63b2703e26e651248c3b50e',
+            'token_type': 'bearer'
+        }
+
+    def testOauthValidButUnavailAPI(self):
+        """
+        Test that accessing an unavailable GitHub API with what seems to be
+        a valid OAuth2 token does not crash the login
+        """
+        errmsg, emails = self.attemptValidOauth(self.trac_env_broken_api, self.oauthCallbackSuccess)
+        self.assertIn(
+            _("An error occurred while communicating with the GitHub API"),
+            errmsg,
+            "Request to unavailable API with valid OAuth token should print an error.")
+
+    def testOauthValidButBrokenAPI(self):
+        """
+        Test that accessing an broken GitHub API with what seems to be a valid
+        OAuth2 token does not crash the login
+        """
+        errmsg, emails = self.attemptValidOauth(self.trac_env_broken_api,
+                                                self.oauthCallbackSuccess,
+                                                retcode=403)
+        self.assertIn(
+            _("An error occurred while communicating with the GitHub API"),
+            errmsg,
+            "Failing API request with valid OAuth token should print an error.")
+
+    def testOauthValidEmailAPIInvalid(self):
+        """
+        Test that a login with a valid OAuth2 but invalid data returned from
+        the email request API does not crash
+        """
+        answers = {
+            '/user': {
+                'user': 'trololol',
+                'email': 'lololort@example.com',
+                'login': 'trololol'
+            },
+            '/user/email': {
+                'foo': 'bar'
+            }
+        }
+
+        errmsg, emails = self.attemptValidOauth(
+                self.trac_env, self.oauthCallbackSuccess, retcode=200,
+                answers=answers, request_email=True)
+        self.assertIn(
+            _("An error occurred while retrieving your email address from the GitHub API"),
+            errmsg,
+            "Failing email API request with valid OAuth token should print an error.")
+
+    def getEmail(self, answers, **kwargs):
+        """Get and return the email address the system has chosen for the given config and answers"""
+        errmsg, emails = self.attemptValidOauth(
+                self.trac_env, self.oauthCallbackSuccess, retcode=200,
+                answers=answers, **kwargs)
+        self.assertEqual(len(errmsg), 0,
+                         "Successful login should not print an error.")
+
+        return emails
+
+    def testOauthValid(self):
+        """Test that a login with a valid OAuth2 token succeeds"""
+        answers = {
+            '/user': {
+                'user': 'trololol',
+                'email': 'lololort@example.com',
+                'login': 'trololol'
+            }
+        }
+
+        email = self.getEmail(answers)
+        self.assertEqual(email, ['lololort@example.com'])
+
+    def testOauthEmailIgnoresUnverified(self):
+        """
+        Test that request_email=True ignores unverified email addresses and
+        prefers primary addresses
+        """
+        answers = {
+            '/user': {
+                'user': 'trololol',
+                'login': 'trololol'
+            },
+            '/user/emails': [
+                {
+                    'email': 'torvalds@linux-foundation.org',
+                    'verified': False,
+                    'primary': True
+                },
+                {
+                    'email': 'lololort@example.net',
+                    'verified': True,
+                    'primary': False
+                },
+                {
+                    'email': 'lololort@example.com',
+                    'verified': True,
+                    'primary': True
+                },
+            ]
+        }
+
+        email = self.getEmail(answers, request_email=True)
+        self.assertEqual(email, ['lololort@example.com'])
+
 
 class GitHubPostCommitHookTests(TracGitHubTests):
 
@@ -545,13 +784,53 @@ class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(json.dumps(answer))
 
+    def do_POST(self):
+        md = self.server.mockdata
+        md['lock'].acquire()
+        retcode = md['retcode']
+        contenttype = md['content-type']
+        postcallback = md['post-callback']
+        md['lock'].release()
+
+        max_chunk_size = 10*1024*1024
+        size_remaining = int(self.headers["content-length"])
+        L = []
+        while size_remaining:
+            chunk_size = min(size_remaining, max_chunk_size)
+            chunk = self.rfile.read(chunk_size)
+            if not chunk:
+                break
+            L.append(chunk)
+            size_remaining -= len(L[-1])
+        args = urlparse.parse_qs(''.join(L))
+
+        retcode = 404
+        answer = {}
+        if postcallback:
+            try:
+                retcode, answer = postcallback(self.path, args)
+            except Exception:
+                retcode = 500
+                answer = traceback.format_exc()
+
+        self.send_response(retcode)
+        self.send_header("Content-Type", contenttype)
+        self.end_headers()
+        self.wfile.write(json.dumps(answer))
+
+
 class TracContext(object):
     """
     Context manager that starts and stops a configured tracd instance on port
     8765.
     """
 
-    _valid_attrs = ('cached_git', 'organization', 'username', 'access_token', 'webhook_secret')
+    _valid_attrs = ('cached_git',
+                    'request_email',
+                    'organization',
+                    'username',
+                    'access_token',
+                    'webhook_secret')
     """ List of all valid attributes to be passed to createTracEnvironment() """
 
     cached_git = False
@@ -568,6 +847,9 @@ class TracContext(object):
                         Trac environment and start tracd.
         :param env: Dictionary of environment variables to set when starting
                     tracd, or `None` for a copy of the current environment.
+        :param request_email: `True` to request access to all email addresses
+                              from GitHub in the login module; defaults to
+                              `False`.
         :param cached_git: `True` to use a persistent repository cache;
                             defaults to `False`.
         :param organization: Name of the GitHub organization to configure for
@@ -632,7 +914,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
     @classmethod
     def setUpClass(cls):
         cls.createGitRepositories()
-        cls.startAPIMock()
+        cls.mockdata = startAPIMock(8766)
 
         # Prepare sets of tracd environment variables
         tracd_env = os.environ.copy()
@@ -661,43 +943,10 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         cls.trac_env = trac_env
         cls.trac_env_secured = trac_env_secured
 
-        # Set up shared data for the API mocking server and provide locking
-        mockdata = {
-            'lock': threading.Lock(),
-            'retcode': 500,
-            'content-type': 'application/json',
-            'answers': {}
-        }
-        cls.mockdata = mockdata
-
     @classmethod
     def tearDownClass(cls):
         cls.removeGitRepositories()
         # API Mock server is a daemon thread and will automatically stop
-
-    @classmethod
-    def startAPIMock(cls):
-        cls.thread = threading.Thread(target=cls.apiMockServer)
-        cls.thread.daemon = True
-        cls.thread.start()
-
-    @classmethod
-    def updateMockData(cls, retcode=None, contenttype=None, answers=None):
-        cls.mockdata['lock'].acquire()
-        if retcode is not None:
-            cls.mockdata['retcode'] = retcode
-        if contenttype is not None:
-            cls.mockdata['content-type'] = contenttype
-        if answers is not None:
-            cls.mockdata['answers'] = answers.copy()
-        cls.mockdata['lock'].release()
-
-    @classmethod
-    def apiMockServer(cls):
-        httpd = BaseHTTPServer.HTTPServer(('127.0.0.1', 8766), GitHubAPIMock)
-        # Make mockdata available to server
-        httpd.mockdata = cls.mockdata
-        httpd.serve_forever()
 
     def test_000_api_refuses_connection(self):
         """
@@ -734,7 +983,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that a request with a failing API endpoint still succeeds.
         """
-        self.updateMockData(retcode=500, answers={
+        updateMockData(self.mockdata, retcode=500, answers={
             '/orgs/%s/teams' % self.organization: {}
         })
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
@@ -748,7 +997,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that a request with non-existant API endpoint still succeeds.
         """
-        self.updateMockData(retcode=404, answers={})
+        updateMockData(self.mockdata, retcode=404, answers={})
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
             response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
@@ -761,7 +1010,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that a GitHub organization without teams is handled correctly.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -793,7 +1042,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             users[3]
         ]
 
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: [
                 {
                     "id": 1,
@@ -871,7 +1120,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that a GET request to /github-groups/? prints a message and returns HTTP 405.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -891,7 +1140,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that unsupported events sent to /github-groups/ are handled correctly.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -907,7 +1156,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that a ping event sent to /github-groups/ is handled correctly.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -924,7 +1173,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that a ping event with non-JSON payload sent to /github-groups/ does not crash the service.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -941,7 +1190,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that a ping event without the expected JSON fields sent to /github-groups/ does not crash the service.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -976,7 +1225,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             users[3]
         ]
 
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: [
                 {
                     "id": 1,
@@ -1014,7 +1263,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                           "Group to be removed not found in group output, test will be meaningless.")
 
             # Change the Mock API output
-            self.updateMockData(answers={
+            updateMockData(self.mockdata, answers={
                 '/orgs/%s/teams' % self.organization: [
                     {
                         "id": 12,
@@ -1053,7 +1302,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         Test that a membership event that deletes a non-existant team does not crash anything.
         """
 
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -1080,7 +1329,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         Test that adding a team with a MembershipEvent works as expected.
         """
 
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -1099,7 +1348,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
             # Update the API result
-            self.updateMockData(retcode=200, answers={
+            updateMockData(self.mockdata, retcode=200, answers={
                 '/orgs/%s/teams' % self.organization: [
                     {
                         "id": 1,
@@ -1142,7 +1391,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         ]
         team1members = [users[0]]
 
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: [
                 {
                     "id": 1,
@@ -1164,7 +1413,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
             # Update the API result
             team1members.append(users[1])
-            self.updateMockData(retcode=200, answers={
+            updateMockData(self.mockdata, retcode=200, answers={
                 '/orgs/%s/teams' % self.organization: [
                     {
                         "id": 1,
@@ -1207,7 +1456,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         ]
         team1members = [users[0], users[1]]
 
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: [
                 {
                     "id": 1,
@@ -1229,7 +1478,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
             # Update the API result
             team1members.remove(users[1])
-            self.updateMockData(retcode=200, answers={
+            updateMockData(self.mockdata, retcode=200, answers={
                 '/orgs/%s/teams' % self.organization: [
                     {
                         "id": 1,
@@ -1262,7 +1511,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that an unsigned event sent to /github-groups/ is rejected if a webhook secret was configured.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -1279,7 +1528,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that an event sent to /github-groups/ with an unsupported signature algorithm is rejected if a webhook secret was configured.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -1299,7 +1548,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that an event sent to /github-groups/ with an invalid signature is rejected if a webhook secret was configured.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -1319,7 +1568,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test that a correctly signed ping event sent to /github-groups/ is accepted if a webhook secret was configured.
         """
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -1343,7 +1592,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         Test that a failing API after a membership event was sent correctly returns a failure state.
         """
 
-        self.updateMockData(retcode=200, answers={
+        updateMockData(self.mockdata, retcode=200, answers={
             '/orgs/%s/teams' % self.organization: []
         })
 
@@ -1357,7 +1606,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
             # Change the mock to always fail
-            self.updateMockData(retcode=403)
+            updateMockData(self.mockdata, retcode=403)
             # Send the delete event
             response = requests.post(URL + '/github-groups',
                                      allow_redirects=False,
@@ -1367,6 +1616,82 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                              "Sending a membership event with broken API backend should return HTTP 500")
             self.assertEqual(response.text, "failure")
 
+def startAPIMock(port):
+    """
+    Start an GitHub API mocking server on the given `port` and return the
+    `mockdata` dict as explained in `apiMockServer()`. Use `updateMockData()`
+    to change the contents of the mocking data. The mocking server runs in
+    a daemon thread and does not need to be stopped.
+
+    :param port: The port to which the server should bind
+    """
+    mockdata = {
+        'lock': threading.Lock(),
+        'retcode': 500,
+        'content-type': 'application/json',
+        'answers': {},
+        'postcallback': None
+    }
+    thread = threading.Thread(target=apiMockServer,
+                              args=(port, mockdata))
+    thread.daemon = True
+    thread.start()
+
+    return mockdata
+
+def updateMockData(md, retcode=None, contenttype=None, answers=None,
+                   postcallback=None):
+    """
+    Update a mockdata object using appropriate locking. Each of the keyword
+    arguments can be `None` (the same as not passing it), which means it should
+    not be changed, or a value, which will be copied into the mockdata dict.
+
+    :param md: The mockdata object as returned by `startAPIMock()`
+    :param retcode: The HTTP return code for the next requests
+    :param contenttype: The Content-Type HTTP header for the next requests
+    :param answers: A dictionary mapping paths to objects that will be
+                    JSON-encoded and returned for requests to the paths.
+    :param postcallback: A callback function called for the next POST requests.
+                         Arguments are the requested path and a dict of POST
+                         data as returned by `urlparse.parse_qs()`. The
+                         callback should return a tuple `(retcode, answer)`
+                         where `retcode` is the HTTP return code and `answer`
+                         will be JSON-encoded and sent to the client. Note that
+                         this callback is run in a different thread, so pay
+                         attention to race conditions! To disable the previous
+                         callback, set this to an empty string.
+    """
+    md['lock'].acquire()
+    if retcode is not None:
+        md['retcode'] = retcode
+    if contenttype is not None:
+        md['content-type'] = contenttype
+    if answers is not None:
+        md['answers'] = answers.copy()
+    if postcallback is not None:
+        md['post-callback'] = postcallback
+    md['lock'].release()
+
+def apiMockServer(port, mockdata):
+    """
+    Thread target for an GitHub API mock server started on the given `port`
+    with the given dict of `mockdata`.
+
+    :param port: The port to which the server should bind
+    :param mockdata: A dictionary with the keys "lock", "retcode",
+                     "content-type" and "answers" where "lock" is
+                     a threading.Lock() that will be acquired while the thread
+                     reads from the dict, "retcode" is the HTTP return code of
+                     the next requests, "content-type" is the Content-Type HTTP
+                     header to send with the next requests, and "answers" is
+                     a dictionary mapping request paths to objects that should
+                     be JSON-encoded and returned. Use `updateMockData()` to
+                     update the contents of the mockdata dict.
+    """
+    httpd = BaseHTTPServer.HTTPServer(('127.0.0.1', port), GitHubAPIMock)
+    # Make mockdata available to server
+    httpd.mockdata = mockdata
+    httpd.serve_forever()
 
 if __name__ == '__main__':
     if glob.glob('test-*'):
