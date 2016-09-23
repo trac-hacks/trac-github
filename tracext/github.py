@@ -106,6 +106,9 @@ class GitHubLoginModule(LoginModule):
         if self.request_email:
             emails = oauth.get('https://api.github.com/user/emails').json()
             for item in emails:
+                if not item['verified']:
+                    # ignore unverified email addresses
+                    continue
                 if item['primary']:
                     email = item['email']
                     break
