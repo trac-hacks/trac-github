@@ -103,9 +103,16 @@ class GitHubLoginModule(LoginModule):
         except (oauthlib.oauth2.OAuth2Error, requests.exceptions.ConnectionError) as exc:
             self._reject_oauth(req, exc)
 
-        user = oauth.get(github_api_url + 'user').json()
-        name = user.get('name')
-        email = user.get('email')
+        try:
+            user = oauth.get(github_api_url + 'user').json()
+            # read all required data here to deal with errors correctly
+            name = user.get('name')
+            email = user.get('email')
+            login = user.get('login')
+        except Exception as exc: # pylint: disable=broad-except
+            self._reject_oauth(
+                req, exc,
+                reason=_("An error occurred while communicating with the GitHub API"))
         if self.request_email:
             emails = oauth.get(github_api_url + 'user/emails').json()
             for item in emails:
@@ -116,17 +123,20 @@ class GitHubLoginModule(LoginModule):
                     email = item['email']
                     break
         # Small hack to pass the username to _do_login.
-        req.environ['REMOTE_USER'] = user['login']
+        req.environ['REMOTE_USER'] = login
         # Save other available values in the session.
         req.session.setdefault('name', name or '')
         req.session.setdefault('email', email or '')
 
         return super(GitHubLoginModule, self)._do_login(req)
 
-    def _reject_oauth(self, req, exc):
-            self.log.warn(exc)
-            add_warning(req, _("Invalid request. Please try to login again."))
-            self._redirect_back(req)
+    def _reject_oauth(self, req, exc, reason=None):
+        self.log.warn("An OAuth authorization attempt was rejected due to an exception: "
+                      "%s\n%s" % (exc, traceback.format_exc()))
+        if reason is None:
+            reason = _("Invalid request. Please try to login again.")
+        add_warning(req, reason)
+        self._redirect_back(req)
 
     def _do_logout(self, req):
         req.session.pop('oauth_state', None)
