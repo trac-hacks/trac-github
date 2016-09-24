@@ -92,8 +92,6 @@ class GitHubLoginModule(LoginModule):
 
         oauth = self._oauth_session(req, state)
 
-        authorization_response = req.abs_href(req.path_info) + '?' + req.query_string
-        client_secret = self._client_config('secret')
         # Inner import to avoid a hard dependency on requests-oauthlib.
         import oauthlib
         import requests
@@ -102,8 +100,8 @@ class GitHubLoginModule(LoginModule):
         try:
             oauth.fetch_token(
                 github_oauth_url + 'login/oauth/access_token',
-                authorization_response=authorization_response,
-                client_secret=client_secret)
+                authorization_response=req.abs_href(req.path_info) + '?' + req.query_string,
+                client_secret=self._client_config('secret'))
         except (oauthlib.oauth2.OAuth2Error, requests.exceptions.ConnectionError) as exc:
             self._reject_oauth(req, exc)
 
@@ -119,8 +117,7 @@ class GitHubLoginModule(LoginModule):
                 reason=_("An error occurred while communicating with the GitHub API"))
         if self.request_email:
             try:
-                emails = oauth.get(github_api_url + 'user/emails').json()
-                for item in emails:
+                for item in oauth.get(github_api_url + 'user/emails').json():
                     if not item['verified']:
                         # ignore unverified email addresses
                         continue
