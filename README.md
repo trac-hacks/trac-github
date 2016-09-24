@@ -160,11 +160,11 @@ could authenticate with the same username through different systems!
 If it's impractical to set the Client ID and Client Secret in the Trac
 configuration file, you have some alternatives:
 
-- If `client_secret` is an hexadecimal value, trac-github will use it as is.
-- If `client_secret` is an uppercase value, trac-github will use the content
-  of the corresponding environment variable as client secret.
-- If `client_secret` is anything else, trac-github will interpret it as a file
-  name and use the contents of that file as client secret.
+- If `client_secret` matches `[A-Z_]+` (uppercase only), trac-github will use
+  the content of the corresponding environment variable as client secret.
+- If `client_secret` starts with '/' or './', trac-github will interpret it as
+  a file name and use the contents of that file as client secret.
+- If `client_secret` is anything else, trac-github will use it as is.
 
 By default the preferences will use the public email address of the
 authenticated GitHub user. If the public email address is not set, the field
@@ -268,6 +268,11 @@ in your organization. Note that members of your organization that are not part
 of a team will not be part of this group. This limitation is necessary because
 GitHub does not (yet) provide a notification mechanism for changes in
 organization membership.
+
+If you do not want to store the API secrets for `access_token` and
+`webhook_secret` in trac.ini, you can use the same alternatives as for
+`client_id` and `client_secret` documented [above](#authentication).
+
 
 Advanced setup
 --------------

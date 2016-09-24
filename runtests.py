@@ -38,6 +38,7 @@ NOGHGIT = 'test-git-nogithub'
 ENV = 'test-trac-github'
 CONF = '%s/conf/trac.ini' % ENV
 URL = 'http://localhost:8765/%s' % ENV
+SECRET = 'test-secret'
 HEADERS = {'Content-Type': 'application/json', 'X-GitHub-Event': 'push'}
 
 COVERAGE = False
@@ -119,8 +120,14 @@ class TracGitHubTests(unittest.TestCase):
             conf.set('git', 'persistent_cache', 'true')
 
         conf.add_section('github')
-        conf.set('github', 'client_id', '01234567890123456789')
-        conf.set('github', 'client_secret', '0123456789abcdef0123456789abcdef012345678')
+        client_id = '01234567890123456789'
+        if 'client_id' in kwargs:
+            client_id = kwargs['client_id']
+        conf.set('github', 'client_id', client_id)
+        client_secret = '0123456789abcdef0123456789abcdef012345678'
+        if 'client_secret' in kwargs:
+            client_secret = kwargs['client_secret']
+        conf.set('github', 'client_secret', client_secret)
         conf.set('github', 'repository', 'aaugustin/trac-github')
         conf.set('github', 'alt.repository', 'follower/trac-github')
         conf.set('github', 'alt.branches', 'master stable/*')
@@ -419,9 +426,14 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         cls.trac_env_broken = trac_env_broken
         cls.trac_env_broken_api = trac_env_broken_api
 
+        with open(SECRET, 'wb') as fp:
+            fp.write('98765432109876543210')
+
+
     @classmethod
     def tearDownClass(cls):
         cls.removeGitRepositories()
+        os.remove(SECRET)
 
     def testLoginWithReqEmail(self):
         """Test that configuring request_email = true requests the user:email scope from GitHub"""
@@ -442,6 +454,69 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                 'scope': ['user:email'],
                 'state': [state],
             })
+
+    def loginAndVerifyClientId(self, expected_client_id):
+        """
+        Open the login page and check that the client_id in the redirect target
+        matches the expected value.
+        """
+        response = requests.get(URL + '/github/login', allow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+
+        redirect_url = urlparse.urlparse(response.headers['Location'])
+        self.assertEqual(redirect_url.scheme, 'https')
+        self.assertEqual(redirect_url.netloc, 'github.com')
+        self.assertEqual(redirect_url.path, '/login/oauth/authorize')
+        params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
+        state = params['state'][0]  # this is a random value
+        self.assertEqual(params, {
+            'client_id': [expected_client_id],
+            'redirect_uri': [URL + '/github/oauth'],
+            'response_type': ['code'],
+            'scope': [''],
+            'state': [state],
+        })
+
+    def testLoginWithSecretInEnvironment(self):
+        """Test that passing client_id in environment works"""
+
+        secret_env = os.environ.copy()
+        secret_env.update({'TRAC_GITHUB_CLIENT_ID': '98765432109876543210'})
+
+        with TracContext(self, client_id='TRAC_GITHUB_CLIENT_ID', env=secret_env):
+            self.loginAndVerifyClientId('98765432109876543210')
+
+    def testLoginWithSecretInFile(self):
+        """Test that passing client_id in absolute path works"""
+
+        path = os.path.join(os.getcwd(), SECRET)
+
+        with TracContext(self, client_id=path):
+            self.loginAndVerifyClientId('98765432109876543210')
+
+    def testLoginWithSecretInRelativeFile(self):
+        """Test that passing client_id in relative path works"""
+
+        path = os.path.join('.', SECRET)
+
+        with TracContext(self, client_id=path):
+            self.loginAndVerifyClientId('98765432109876543210')
+
+    def testLoginWithUnconfiguredClientId(self):
+        """Test that leaving client_id unconfigured prints a warning"""
+        with TracContext(self, client_id=''):
+            session = requests.Session()
+
+            response = session.get(URL + '/github/login', allow_redirects=True)
+            self.assertEqual(response.status_code, 200)
+
+            tree = html.fromstring(response.content)
+            errmsg = ''.join(tree.xpath('//div[@id="warning"]/text()')).strip()
+            self.assertIn(
+                "GitHubLogin configuration incomplete, missing client_id or "
+                "client_secret", errmsg,
+                "An unconfigured GitHubLogin module should redirect and print "
+                "a warning on login attempts.")
 
     def attemptValidOauth(self, testenv, callback, **kwargs):
         """
@@ -912,6 +987,8 @@ class TracContext(object):
     """
 
     _valid_attrs = ('cached_git',
+                    'client_id',
+                    'client_secret',
                     'request_email',
                     'preferred_email_domain',
                     'organization',
@@ -935,6 +1012,8 @@ class TracContext(object):
                         Trac environment and start tracd.
         :param env: Dictionary of environment variables to set when starting
                     tracd, or `None` for a copy of the current environment.
+        :param client_id: Client ID for the GitHub OAuth application
+        :param client_secret: Client Secret for the GitHub OAuth application
         :param request_email: `True` to request access to all email addresses
                               from GitHub in the login module; defaults to
                               `False`.
