@@ -13,7 +13,7 @@ from genshi.builder import tag
 
 import trac
 from trac.cache import cached
-from trac.config import ListOption, Option
+from trac.config import ListOption, BoolOption, Option
 from trac.core import Component, implements
 from trac.perm import IPermissionGroupProvider
 from trac.util.translation import _
@@ -25,6 +25,14 @@ from trac.web.chrome import add_warning
 
 
 class GitHubLoginModule(LoginModule):
+
+    request_email = BoolOption(
+        'github', 'request_email', 'false',
+        doc="Request access to the email address of the GitHub user.")
+
+    preferred_email_domain = Option(
+        'github', 'preferred_email_domain', '',
+        doc="Prefer email address under this domain over the primary address.")
 
     # INavigationContributor methods
 
@@ -84,31 +92,63 @@ class GitHubLoginModule(LoginModule):
 
         oauth = self._oauth_session(req, state)
 
-        authorization_response = req.abs_href(req.path_info) + '?' + req.query_string
-        client_secret = self._client_config('secret')
         # Inner import to avoid a hard dependency on requests-oauthlib.
         import oauthlib
+        import requests
+        github_oauth_url = os.environ.get("TRAC_GITHUB_OAUTH_URL", "https://github.com/")
+        github_api_url = os.environ.get("TRAC_GITHUB_API_URL", "https://api.github.com/")
         try:
             oauth.fetch_token(
-                'https://github.com/login/oauth/access_token',
-                authorization_response=authorization_response,
-                client_secret=client_secret)
-        except oauthlib.oauth2.OAuth2Error as exc:
+                github_oauth_url + 'login/oauth/access_token',
+                authorization_response=req.abs_href(req.path_info) + '?' + req.query_string,
+                client_secret=self._client_config('secret'))
+        except (oauthlib.oauth2.OAuth2Error, requests.exceptions.ConnectionError) as exc:
             self._reject_oauth(req, exc)
 
-        user = oauth.get('https://api.github.com/user').json()
+        try:
+            user = oauth.get(github_api_url + 'user').json()
+            # read all required data here to deal with errors correctly
+            name = user.get('name')
+            email = user.get('email')
+            login = user.get('login')
+        except Exception as exc: # pylint: disable=broad-except
+            self._reject_oauth(
+                req, exc,
+                reason=_("An error occurred while communicating with the GitHub API"))
+        if self.request_email:
+            try:
+                for item in oauth.get(github_api_url + 'user/emails').json():
+                    if not item['verified']:
+                        # ignore unverified email addresses
+                        continue
+                    if (self.preferred_email_domain and
+                        item['email'].endswith('@' + self.preferred_email_domain)):
+                        email = item['email']
+                        break
+                    if item['primary']:
+                        email = item['email']
+                        if not self.preferred_email_domain:
+                            break
+            except Exception as exc: # pylint: disable=broad-except
+                self._reject_oauth(
+                    req, exc,
+                    reason=_("An error occurred while retrieving your email address "
+                             "from the GitHub API"))
         # Small hack to pass the username to _do_login.
-        req.environ['REMOTE_USER'] = user['login']
+        req.environ['REMOTE_USER'] = login
         # Save other available values in the session.
-        req.session.setdefault('name', user.get('name') or '')
-        req.session.setdefault('email', user.get('email') or '')
+        req.session.setdefault('name', name or '')
+        req.session.setdefault('email', email or '')
 
         return super(GitHubLoginModule, self)._do_login(req)
 
-    def _reject_oauth(self, req, exc):
-            self.log.warn(exc)
-            add_warning(req, _("Invalid request. Please try to login again."))
-            self._redirect_back(req)
+    def _reject_oauth(self, req, exc, reason=None):
+        self.log.warn("An OAuth authorization attempt was rejected due to an exception: "
+                      "%s\n%s" % (exc, traceback.format_exc()))
+        if reason is None:
+            reason = _("Invalid request. Please try to login again.")
+        add_warning(req, reason)
+        self._redirect_back(req)
 
     def _do_logout(self, req):
         req.session.pop('oauth_state', None)
@@ -116,12 +156,15 @@ class GitHubLoginModule(LoginModule):
 
     def _oauth_session(self, req, state=None):
         client_id = self._client_config('id')
+        scope = ['']
+        if self.request_email:
+            scope = ['user:email']
         redirect_uri = req.abs_href.github('oauth')
         # Inner import to avoid a hard dependency on requests-oauthlib.
         from requests_oauthlib import OAuth2Session
         return OAuth2Session(
             client_id,
-            scope=[''],
+            scope=scope,
             redirect_uri=redirect_uri,
             state=state,
         )
