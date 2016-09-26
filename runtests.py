@@ -150,8 +150,11 @@ class TracGitHubTests(unittest.TestCase):
         with open(CONF, 'wb') as fp:
             conf.write(fp)
 
-        subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', ''])
-        subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', 'alt'])
+        run_resync = kwargs['resync'] if 'resync' in kwargs else True
+        if run_resync:
+            # Allow skipping resync for perfomance reasons if not required
+            subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', ''])
+            subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', 'alt'])
 
     @classmethod
     def removeTracEnvironment(cls):
@@ -402,7 +405,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
 
     def testLoginWithReqEmail(self):
         """Test that configuring request_email = true requests the user:email scope from GitHub"""
-        with TracContext(self, request_email=True):
+        with TracContext(self, request_email=True, resync=False):
             response = requests.get(URL + '/github/login', allow_redirects=False)
             self.assertEqual(response.status_code, 302)
 
@@ -436,7 +439,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                 ctxt_kwargs[kwarg] = kwargs[kwarg]
             else:
                 other_kwargs[kwarg] = kwargs[kwarg]
-        with TracContext(self, env=testenv, **ctxt_kwargs):
+        with TracContext(self, env=testenv, resync=False, **ctxt_kwargs):
             updateMockData(self.mockdata, postcallback=callback, **other_kwargs)
             try:
                 session = requests.Session()
@@ -894,7 +897,8 @@ class TracContext(object):
                     'organization',
                     'username',
                     'access_token',
-                    'webhook_secret')
+                    'webhook_secret',
+                    'resync')
     """ List of all valid attributes to be passed to createTracEnvironment() """
 
     cached_git = False
@@ -924,6 +928,9 @@ class TracContext(object):
                              group syncing. Defaults to unset.
         :param webhook_secret: Secret used to validate WebHook API calls if
                                present. Defaults to unset.
+        :param resync: `False` to skip running `trac admin repository resync`
+                       during environment setup for speed reasons. Defaults to
+                       `True`.
         """
         for kwarg in kwargs:
             if kwarg in self._valid_attrs:
@@ -995,6 +1002,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         # Prepare sets of trac configuration settings
         trac_env = {
             'cached_git': True,
+            'resync': False,
             'organization': cls.organization,
             'username': cls.username,
             'access_token': cls.access_token
@@ -1027,7 +1035,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         Test whether a request with an unconfigured GitHubGroupsProvider fails.
         """
-        with TracContext(self):
+        with TracContext(self, resync=False):
             response = requests.get(URL + '/newticket', allow_redirects=False)
             self.assertEqual(response.status_code, 200,
                              "Unconfigured GitHubGroupsProvider caused requests to fail")
@@ -1038,7 +1046,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         """
         self.assertNotIn('TRAC_GITHUB_ENABLE_DEBUGGING', self.tracd_env,
                          "tracd_env enables debugging, but should not; did you export TRAC_GITHUB_ENABLE_DEBUGGING?")
-        with TracContext(self, env=self.tracd_env):
+        with TracContext(self, env=self.tracd_env, resync=False):
             response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
             self.assertEqual(response.status_code, 404,
                              "Debugging API was not enabled, but did not return HTTP 404")
