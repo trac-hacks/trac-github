@@ -33,6 +33,7 @@ import requests
 
 GIT = 'test-git-foo'
 ALTGIT = 'test-git-bar'
+NOGHGIT = 'test-git-nogithub'
 
 ENV = 'test-trac-github'
 CONF = '%s/conf/trac.ini' % ENV
@@ -73,8 +74,10 @@ class TracGitHubTests(unittest.TestCase):
     def createGitRepositories(cls):
         subprocess.check_output(['git', 'init', GIT])
         subprocess.check_output(['git', 'init', ALTGIT])
+        subprocess.check_output(['git', 'init', NOGHGIT])
         cls.makeGitCommit(GIT, 'README', 'default git repository\n')
         cls.makeGitCommit(ALTGIT, 'README', 'alternative git repository\n')
+        cls.makeGitCommit(NOGHGIT, 'README', 'git repository not on GitHub\n')
         subprocess.check_output(['git', 'clone', '--quiet', '--mirror', GIT, '%s-mirror' % GIT])
         subprocess.check_output(['git', 'clone', '--quiet', '--mirror', ALTGIT, '%s-mirror' % ALTGIT])
 
@@ -82,6 +85,7 @@ class TracGitHubTests(unittest.TestCase):
     def removeGitRepositories(cls):
         shutil.rmtree(GIT)
         shutil.rmtree(ALTGIT)
+        shutil.rmtree(NOGHGIT)
         shutil.rmtree('%s-mirror' % GIT)
         shutil.rmtree('%s-mirror' % ALTGIT)
 
@@ -146,6 +150,8 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('repositories', '.type', 'git')
         conf.set('repositories', 'alt.dir', os.path.realpath('%s-mirror' % ALTGIT))
         conf.set('repositories', 'alt.type', 'git')
+        conf.set('repositories', 'nogh.dir', os.path.realpath('%s/.git' % NOGHGIT))
+        conf.set('repositories', 'nogh.type', 'git')
 
         with open(CONF, 'wb') as fp:
             conf.write(fp)
@@ -155,6 +161,7 @@ class TracGitHubTests(unittest.TestCase):
             # Allow skipping resync for perfomance reasons if not required
             subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', ''])
             subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', 'alt'])
+            subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', 'nogh'])
 
     @classmethod
     def removeTracEnvironment(cls):
@@ -203,6 +210,8 @@ class TracGitHubTests(unittest.TestCase):
         if branch != 'master':
             subprocess.check_output(['git', '-C', repo, 'checkout', 'master'],
                     stderr=subprocess.PIPE)
+        changeset = subprocess.check_output(['git', '-C', repo, 'rev-parse', 'HEAD'])
+        return changeset.strip()
 
     @staticmethod
     def openGitHubHook(n=1, reponame=''):
@@ -248,6 +257,12 @@ class GitHubBrowserTests(TracGitHubTests):
         else:
             self.fail("URL didn't redirect")
 
+    def testNonGitHubLinkToChangeset(self):
+        changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for browser tests')
+        subprocess.check_output(['trac-admin', ENV, 'changeset', 'added', 'nogh', changeset])
+        response = requests.get(URL + '/changeset/' + changeset + '/nogh', allow_redirects=False)
+        self.assertEqual(response.status_code, 200)
+
     def testLinkToPath(self):
         self.makeGitCommit(GIT, 'myfile', 'for more browser tests')
         changeset = self.openGitHubHook().read().rstrip()[-40:]
@@ -271,6 +286,12 @@ class GitHubBrowserTests(TracGitHubTests):
                     'https://github.com/follower/trac-github/blob/%s/myfile' % changeset)
         else:
             self.fail("URL didn't redirect")
+
+    def testNonGitHubLinkToPath(self):
+        changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for more browser tests')
+        subprocess.check_output(['trac-admin', ENV, 'changeset', 'added', 'nogh', changeset])
+        response = requests.get(URL + '/changeset/' + changeset + '/nogh/myfile', allow_redirects=False)
+        self.assertEqual(response.status_code, 200)
 
     def testBadChangeset(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
