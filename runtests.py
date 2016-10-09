@@ -189,20 +189,19 @@ class TracGitHubTests(unittest.TestCase):
 
     @staticmethod
     def makeGitBranch(repo, branch):
-        subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'branch', branch])
+        subprocess.check_output(['git', '-C', repo, 'branch', branch])
 
     @staticmethod
     def makeGitCommit(repo, path, content, message='edit', branch='master'):
         if branch != 'master':
-            subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'checkout', branch],
+            subprocess.check_output(['git', '-C', repo, 'checkout', branch],
                     stderr=subprocess.PIPE)
-        path = os.path.join(repo, path)
-        with open(path, 'wb') as fp:
+        with open(os.path.join(repo, path), 'wb') as fp:
             fp.write(content)
-        subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'add', path])
-        subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'commit', '-m', message])
+        subprocess.check_output(['git', '-C', repo, 'add', path])
+        subprocess.check_output(['git', '-C', repo, 'commit', '-m', message])
         if branch != 'master':
-            subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'checkout', 'master'],
+            subprocess.check_output(['git', '-C', repo, 'checkout', 'master'],
                     stderr=subprocess.PIPE)
 
     @staticmethod
