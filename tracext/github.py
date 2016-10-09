@@ -215,6 +215,12 @@ class GitHubBrowser(GitHubMixin, ChangesetModule):
         reponame, repos, path = rm.get_repository_by_path(path)
         gh_repo = self.get_gh_repo(reponame)
 
+        if not gh_repo:
+            req.args['new'] = rev
+            req.args['new_path'] = path
+            req.args['reponame'] = reponame
+            return super(GitHubBrowser, self).process_request(req)
+
         rev = repos.normalize_rev(rev)
 
         if path and path != '/':
