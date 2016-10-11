@@ -366,7 +366,7 @@ class GitHubLoginModuleTests(TracGitHubTests):
         response = session.get(URL)
         self.assertEqual(response.status_code, 200)
         self.assertIn(
-            str(_("Invalid request. Please try to login again.")), response.text)
+            "Invalid request. Please try to login again.", response.text)
 
     def testOauthInvalidStateWithoutSession(self):
         session = requests.Session()
@@ -383,7 +383,7 @@ class GitHubLoginModuleTests(TracGitHubTests):
         response = session.get(URL)
         self.assertEqual(response.status_code, 200)
         self.assertIn(
-            str(_("Invalid request. Please try to login again.")), response.text)
+            "Invalid request. Please try to login again.", response.text)
 
     def testLogout(self):
         response = requests.get(URL + '/github/logout', allow_redirects=False)
@@ -497,7 +497,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         """
         errmsg, emails = self.attemptValidOauth(self.trac_env_broken, "")
         self.assertIn(
-            str(_("Invalid request. Please try to login again.")),
+            "Invalid request. Please try to login again.",
             errmsg,
             "OAuth Authorization Request with unavailable backend should not succeed.")
 
@@ -507,7 +507,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
             return 403, {}
         errmsg, emails = self.attemptValidOauth(self.trac_env, cb)
         self.assertIn(
-            str(_("Invalid request. Please try to login again.")),
+            "Invalid request. Please try to login again.",
             errmsg,
             "OAuth Authorization Request with failing backend should not succeed.")
 
@@ -528,7 +528,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         """
         errmsg, emails = self.attemptValidOauth(self.trac_env_broken_api, self.oauthCallbackSuccess)
         self.assertIn(
-            str(_("An error occurred while communicating with the GitHub API")),
+            "An error occurred while communicating with the GitHub API",
             errmsg,
             "Request to unavailable API with valid OAuth token should print an error.")
 
@@ -541,7 +541,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                                                 self.oauthCallbackSuccess,
                                                 retcode=403)
         self.assertIn(
-            str(_("An error occurred while communicating with the GitHub API")),
+            "An error occurred while communicating with the GitHub API",
             errmsg,
             "Failing API request with valid OAuth token should print an error.")
 
@@ -565,7 +565,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                 self.trac_env, self.oauthCallbackSuccess, retcode=200,
                 answers=answers, request_email=True)
         self.assertIn(
-            str(_("An error occurred while retrieving your email address from the GitHub API")),
+            "An error occurred while retrieving your email address from the GitHub API",
             errmsg,
             "Failing email API request with valid OAuth token should print an error.")
 
