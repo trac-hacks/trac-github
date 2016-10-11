@@ -23,8 +23,27 @@ from trac.web.api import IRequestHandler, RequestDone
 from trac.web.auth import LoginModule
 from trac.web.chrome import add_warning
 
+def _config_secret(value):
+    if re.match(r'[A-Z_]+', value):
+        return os.environ.get(value, '')
+    elif value.startswith('/') or value.startswith('./'):
+        with open(value) as f:
+            return f.read().strip()
+    else:
+        return value
+
 
 class GitHubLoginModule(LoginModule):
+
+    client_id = Option(
+        'github', 'client_id', '',
+        doc="""Client ID for the OAuth Application on GitHub.
+               Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
+
+    client_secret = Option(
+        'github', 'client_secret', '',
+        doc="""Client secret for the OAuth Application on GitHub.
+               Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
 
     request_email = BoolOption(
         'github', 'request_email', 'false',
@@ -78,6 +97,10 @@ class GitHubLoginModule(LoginModule):
     # Internal methods
 
     def _do_login(self, req):
+        if not self.client_id or not self.client_secret:
+            add_warning(req, "GitHubLogin configuration incomplete, missing client_id or client_secret")
+            self._redirect_back(req)
+
         oauth = self._oauth_session(req)
         authorization_url, state = oauth.authorization_url(
             'https://github.com/login/oauth/authorize')
@@ -101,7 +124,7 @@ class GitHubLoginModule(LoginModule):
             oauth.fetch_token(
                 github_oauth_url + 'login/oauth/access_token',
                 authorization_response=req.abs_href(req.path_info) + '?' + req.query_string,
-                client_secret=self._client_config('secret'))
+                client_secret=_config_secret(self.client_secret))
         except (oauthlib.oauth2.OAuth2Error, requests.exceptions.ConnectionError) as exc:
             self._reject_oauth(req, exc)
 
@@ -155,7 +178,7 @@ class GitHubLoginModule(LoginModule):
         super(GitHubLoginModule, self)._do_logout(req)
 
     def _oauth_session(self, req, state=None):
-        client_id = self._client_config('id')
+        client_id = _config_secret(self.client_id)
         scope = ['']
         if self.request_email:
             scope = ['user:email']
@@ -169,16 +192,7 @@ class GitHubLoginModule(LoginModule):
             state=state,
         )
 
-    def _client_config(self, key):
-        assert key in ('id', 'secret')
-        value = self.config.get('github', 'client_' + key)
-        if re.match('[0-9a-f]+', value):
-            return value
-        elif value.isupper():
-            return os.environ.get(value, '')
-        else:
-            with open(value) as f:
-                return f.read().strip()
+
 
 
 class GitHubMixin(object):
@@ -574,10 +588,12 @@ class GitHubGroupsProvider(Component):
                       doc="GitHub user for accessing organization data.")
 
     access_token = Option('github', 'access_token', '',
-                          doc="Personal access token for the GitHub user.")
+                          doc="""Personal access token for the GitHub user.
+                                 Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
 
     webhook_secret = Option('github', 'webhook_secret', '',
-                            doc="GitHub webhook secret token.")
+                            doc="""GitHub webhook secret token.
+                                   Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
 
 
     def __init__(self):
@@ -601,9 +617,10 @@ class GitHubGroupsProvider(Component):
 
         github_api_url = os.environ.get("TRAC_GITHUB_API_URL", "https://api.github.com/")
         formatted_url = github_api_url + url.format(*(urllib.quote(str(x)) for x in args))
+        access_token = _config_secret(self.access_token)
         self.log.debug("Hitting GitHub API endpoint %s with user %s", formatted_url, self.username) # pylint: disable=no-member
         try:
-            req = requests.get(formatted_url, auth=(self.username, self.access_token))
+            req = requests.get(formatted_url, auth=(self.username, access_token))
             if req.status_code != 200:
                 try:
                     message = req.json()['message']
@@ -784,8 +801,10 @@ class GitHubGroupsProvider(Component):
         if algorithm not in supported_algorithms:
             return False
 
+        webhook_secret = _config_secret(self.webhook_secret)
+
         hmac_hash = hmac.new(
-            self.webhook_secret.encode('utf-8'),
+            webhook_secret.encode('utf-8'),
             reqdata.encode('utf-8'),
             supported_algorithms[algorithm])
         computed = hmac_hash.hexdigest()
