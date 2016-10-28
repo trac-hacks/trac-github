@@ -40,6 +40,7 @@ CONF = '%s/conf/trac.ini' % ENV
 URL = 'http://localhost:8765/%s' % ENV
 SECRET = 'test-secret'
 HEADERS = {'Content-Type': 'application/json', 'X-GitHub-Event': 'push'}
+UPDATEHOOK = '%s-mirror/hooks/trac-github-update' % GIT
 
 COVERAGE = False
 SHOW_LOG = False
@@ -221,10 +222,9 @@ class TracGitHubTests(unittest.TestCase):
         return changeset.strip()
 
     @staticmethod
-    def openGitHubHook(n=1, reponame=''):
+    def makeGitHubHookPayload(n=1, reponame=''):
         # See https://developer.github.com/v3/activity/events/types/#pushevent
         # We don't reproduce the entire payload, only what the plugin needs.
-        url = (URL + '/github/' + reponame) if reponame else URL + '/github'
         repo = {'': GIT, 'alt': ALTGIT}[reponame]
 
         commits = []
@@ -234,6 +234,13 @@ class TracGitHubTests(unittest.TestCase):
             id, _, message = line.partition(' ')
             commits.append({'id': id, 'message': message, 'distinct': True})
         payload = {'commits': commits}
+        return payload
+
+    @staticmethod
+    def openGitHubHook(n=1, reponame='', payload=None):
+        if not payload:
+            payload = TracGitHubTests.makeGitHubHookPayload(n, reponame)
+        url = (URL + '/github/' + reponame) if reponame else URL + '/github'
         request = urllib2.Request(url, json.dumps(payload), HEADERS)
         return urllib2.urlopen(request)
 
@@ -906,6 +913,60 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         request = urllib2.Request(URL + '/githubnosuchurl', '{}', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
             urllib2.urlopen(request)
+
+
+class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
+
+    @classmethod
+    def createUpdateHook(cls):
+        with open(UPDATEHOOK, 'wb') as fp:
+            # simple shell script to echo back all input
+            fp.write("""#!/bin/sh\nexec cat""")
+            os.fchmod(fp.fileno(), 0o755)
+
+    def createFailingUpdateHook(cls):
+        with open(UPDATEHOOK, 'wb') as fp:
+            fp.write("""#!/bin/sh\nexit 1""")
+            os.fchmod(fp.fileno(), 0o755)
+
+    @classmethod
+    def removeUpdateHook(cls):
+        os.remove(UPDATEHOOK)
+
+    @classmethod
+    def setUpClass(cls):
+        super(GitHubPostCommitHookWithUpdateHookTests, cls).setUpClass()
+        cls.createUpdateHook()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.removeUpdateHook()
+        super(GitHubPostCommitHookWithUpdateHookTests, cls).tearDownClass()
+
+    def testUpdateHook(self):
+        self.makeGitCommit(GIT, 'foo', 'foo content\n')
+        payload = self.makeGitHubHookPayload()
+        output = self.openGitHubHook(payload=payload).read()
+        self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
+                                         r"\* Updating clone\n"
+                                         r"\* Synchronizing with clone\n"
+                                         r"\* Adding commit [0-9a-f]{40}\n"
+                                         r"\* Running trac-github-update hook\n")
+        self.assertEqual(output.split('\n')[-1], json.dumps(payload))
+
+    def testUpdateHookExecFailure(self):
+        os.chmod(UPDATEHOOK, 0o644)
+        self.makeGitCommit(GIT, 'bar', 'bar content\n')
+        payload = self.makeGitHubHookPayload()
+        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 500: Internal Server Error$'):
+            output = self.openGitHubHook(payload=payload).read()
+
+    def testUpdateHookFailure(self):
+        self.createFailingUpdateHook()
+        self.makeGitCommit(GIT, 'baz', 'baz content\n')
+        payload = self.makeGitHubHookPayload()
+        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 500: Internal Server Error$'):
+            output = self.openGitHubHook(payload=payload).read()
 
 
 class GitHubBrowserWithCacheTests(GitHubBrowserTests):

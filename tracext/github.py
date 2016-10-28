@@ -9,6 +9,8 @@ import traceback
 
 from datetime import datetime, timedelta
 
+from subprocess import Popen, PIPE, STDOUT
+
 from genshi.builder import tag
 
 import trac
@@ -896,8 +898,9 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         output += u'* Synchronizing with clone\n'
         repos.sync()
 
+        reqdata = req.read()
         try:
-            payload = json.loads(req.read())
+            payload = json.loads(reqdata)
             revs = [commit['id']
                     for commit in payload['commits'] if commit['distinct']]
         except (ValueError, KeyError):
@@ -921,10 +924,30 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             self.log.error(u'Payload contains unknown %s',
                     describe_commits(unknown))
 
+        status = 200 if output else 204
+
+        git_dir = git.rev_parse('--git-dir').rstrip('\n')
+        hook = os.path.join(git_dir, 'hooks', 'trac-github-update')
+        if os.path.isfile(hook):
+            output += "* Running trac-github-update hook\n"
+            try:
+                p = Popen(hook, cwd=git_dir,
+                          stdin=PIPE, stdout=PIPE, stderr=STDOUT,
+                          close_fds=trac.util.compat.close_fds)
+            except Exception as e:
+                output += "Error: hook execution failed with exception\n%s" % (traceback.format_exc(),)
+                status = 500
+            else:
+                hookoutput = p.communicate(input=reqdata)[0]
+                output += hookoutput.decode('utf-8')
+                if p.returncode != 0:
+                    output += "Error: hook failed with exit code %d\n" % (p.returncode,)
+                    status = 500
+
         for line in output.splitlines():
             self.log.debug(line)
 
-        req.send(output.encode('utf-8'), 'text/plain', 200 if output else 204)
+        req.send(output.encode('utf-8'), 'text/plain', status)
 
 
 def classify_commits(revs, repos, branches):

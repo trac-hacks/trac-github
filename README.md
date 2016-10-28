@@ -125,6 +125,9 @@ field and set the "Content type" to `application/json`. Click "Add webhook".
 If you click on the webhook you just created, at the bottom of the page, you
 should see that a "ping" payload was successufully delivered to Trac
 
+Optionally, you can run additional actions every time GitHub triggers a webhook
+by placing a custom executable script at `<project>.git/hooks/trac-github-update`.
+
 ### Authentication
 
 **`tracext.github.GitHubLoginModule`** provides authentication through
