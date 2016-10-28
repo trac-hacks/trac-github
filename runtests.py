@@ -934,15 +934,51 @@ class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
         answers = md['answers'].copy()
         md['lock'].release()
 
-        if self.path in answers:
-            answer = answers[self.path]
+        path, _, querystring = self.path.partition('?')
+        parameters = {k: v for k, _, v in (q.partition('=') for q in querystring.split('&') if q)}
+
+        if path in answers:
+            answer = answers[path]
         else:
-            answer = {'message': 'No handler for URI %s' % self.path}
+            answer = {'message': 'No handler for URI %s' % path}
             retcode = 404
 
         self.send_response(retcode)
+
+        # Add pagination
+        per_page = 5
+        if isinstance(answer, list):
+            length = len(answer)
+            page = int(parameters.get('page', 1))
+            start = (page - 1) * per_page
+            end = page * per_page
+            answer = answer[start:end]
+
+            links = []
+            if page > 1:
+                prevparams = parameters.copy()
+                prevparams.update({'page': (page - 1)})
+                prev_link = '<http://{}{}?{}>; rel="prev"'.format(
+                    self.headers['Host'],
+                    path,
+                    '&'.join(('='.join((str(k), str(v))) for k, v in prevparams.iteritems()))
+                )
+                links.append(prev_link)
+            if length >= end:
+                nextparams = parameters.copy()
+                nextparams.update({'page': (page + 1)})
+                next_link = '<http://{}{}?{}>; rel="next"'.format(
+                    self.headers['Host'],
+                    path,
+                    '&'.join(('='.join((str(k), str(v))) for k, v in nextparams.iteritems()))
+                )
+                links.append(next_link)
+            if len(links) > 0:
+                self.send_header("Link", ", ".join(links))
+
         self.send_header("Content-Type", contenttype)
         self.end_headers()
+
         self.wfile.write(json.dumps(answer))
 
     def do_POST(self):
@@ -1200,12 +1236,20 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             {"login": u"octocat"},
             {"login": u"octobird"},
             {"login": u"octodolphin"},
-            {"login": u"octofox"}
+            {"login": u"octofox"},
+            {"login": u"octoraccoon"},
+            {"login": u"octokangaroo"},
+            {"login": u"octokoala"},
+            {"login": u"octospider"}
         ]
         team1members = [
             users[0],
             users[1],
-            users[2]
+            users[2],
+            users[4],
+            users[5],
+            users[6],
+            users[7]
         ]
         team12members = [
             users[0],
