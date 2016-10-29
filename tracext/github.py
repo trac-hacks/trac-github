@@ -930,7 +930,7 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             self.log.error(u'Payload contains unknown %s',
                     describe_commits(unknown))
 
-        status = 200 if output else 204
+        status = 200
 
         git_dir = git.rev_parse('--git-dir').rstrip('\n')
         hook = os.path.join(git_dir, 'hooks', 'trac-github-update')
@@ -952,6 +952,9 @@ class GitHubPostCommitHook(GitHubMixin, Component):
 
         for line in output.splitlines():
             self.log.debug(line)
+
+        if status == 200 and not output:
+            status = 204
 
         req.send(output.encode('utf-8'), 'text/plain', status)
 
