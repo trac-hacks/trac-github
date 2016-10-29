@@ -221,7 +221,7 @@ class GitHubMixin(Component):
 
         hmac_hash = hmac.new(
             webhook_secret.encode('utf-8'),
-            reqdata.encode('utf-8'),
+            reqdata,
             supported_algorithms[algorithm])
         computed = hmac_hash.hexdigest()
 
