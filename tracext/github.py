@@ -935,19 +935,19 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         git_dir = git.rev_parse('--git-dir').rstrip('\n')
         hook = os.path.join(git_dir, 'hooks', 'trac-github-update')
         if os.path.isfile(hook):
-            output += "* Running trac-github-update hook\n"
+            output += u'* Running trac-github-update hook\n'
             try:
                 p = Popen(hook, cwd=git_dir,
                           stdin=PIPE, stdout=PIPE, stderr=STDOUT,
                           close_fds=trac.util.compat.close_fds)
             except Exception as e:
-                output += "Error: hook execution failed with exception\n%s" % (traceback.format_exc(),)
+                output += u'Error: hook execution failed with exception\n%s' % (traceback.format_exc(),)
                 status = 500
             else:
                 hookoutput = p.communicate(input=reqdata)[0]
                 output += hookoutput.decode('utf-8')
                 if p.returncode != 0:
-                    output += "Error: hook failed with exit code %d\n" % (p.returncode,)
+                    output += u'Error: hook failed with exit code %d\n' % (p.returncode,)
                     status = 500
 
         for line in output.splitlines():
