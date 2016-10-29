@@ -196,8 +196,36 @@ class GitHubLoginModule(LoginModule):
 
 
 
+class GitHubMixin(Component):
 
-class GitHubMixin(object):
+    webhook_secret = Option('github', 'webhook_secret', '',
+                            doc="""GitHub webhook secret token.
+                                   Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
+
+    def _verify_webhook_signature(self, signature, reqdata):
+        if not self.webhook_secret:
+            return True
+        if not signature:
+            return False
+
+        algorithm, _, expected = signature.partition("=")
+        supported_algorithms = {
+            "sha1": hashlib.sha1,
+            "sha256": hashlib.sha256,
+            "sha512": hashlib.sha512
+        }
+        if algorithm not in supported_algorithms:
+            return False
+
+        webhook_secret = _config_secret(self.webhook_secret)
+
+        hmac_hash = hmac.new(
+            webhook_secret.encode('utf-8'),
+            reqdata.encode('utf-8'),
+            supported_algorithms[algorithm])
+        computed = hmac_hash.hexdigest()
+
+        return hmac.compare_digest(expected, computed)
 
     def get_gh_repo(self, reponame):
         key = 'repository' if is_default(reponame) else '%s.repository' % reponame
@@ -575,7 +603,7 @@ class GitHubOrg(object):
             return False # pragma: no cover
         return self._teamobjects[slug].update()
 
-class GitHubGroupsProvider(Component):
+class GitHubGroupsProvider(GitHubMixin, Component):
     """
     Implements the `IPermissionGroupProvider` and `IRequestHandler` extension
     points to provide GitHub teams as groups in Trac and an endpoint for GitHub
@@ -592,10 +620,6 @@ class GitHubGroupsProvider(Component):
     access_token = Option('github', 'access_token', '',
                           doc="""Personal access token for the GitHub user.
                                  Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
-
-    webhook_secret = Option('github', 'webhook_secret', '',
-                            doc="""GitHub webhook secret token.
-                                   Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
 
 
     def __init__(self):
@@ -763,7 +787,7 @@ class GitHubGroupsProvider(Component):
         # Verify the event's signature
         reqdata = req.read()
         signature = req.get_header('X-Hub-Signature')
-        if not self._verify_signature(signature, reqdata):
+        if not self._verify_webhook_signature(signature, reqdata):
             msg = u'Webhook signature verification failed\n'
             self.log.warning(msg.rstrip('\n')) # pylint: disable=no-member
             req.send(msg.encode('utf-8'), 'text/plain', 403)
@@ -787,31 +811,6 @@ class GitHubGroupsProvider(Component):
                    'possible invalid payload\n%s' % traceback.format_exc())
             self.log.warning(msg.rstrip('\n')) # pylint: disable=no-member
             req.send(msg.encode('utf-8'), 'text/plain', 500)
-
-    def _verify_signature(self, header, reqdata):
-        if not self.webhook_secret:
-            return True
-        if not header:
-            return False
-
-        algorithm, _, expected = header.partition("=")
-        supported_algorithms = {
-            "sha1": hashlib.sha1,
-            "sha256": hashlib.sha256,
-            "sha512": hashlib.sha512
-        }
-        if algorithm not in supported_algorithms:
-            return False
-
-        webhook_secret = _config_secret(self.webhook_secret)
-
-        hmac_hash = hmac.new(
-            webhook_secret.encode('utf-8'),
-            reqdata.encode('utf-8'),
-            supported_algorithms[algorithm])
-        computed = hmac_hash.hexdigest()
-
-        return hmac.compare_digest(expected, computed)
 
     def _handle_ping_ev(self, req, payload): # pylint: disable=no-self-use
         req.send(payload['zen'].encode('utf-8'), 'text/plain', 200)
@@ -885,6 +884,14 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
 
+        # Verify the event's signature
+        reqdata = req.read()
+        signature = req.get_header('X-Hub-Signature')
+        if not self._verify_webhook_signature(signature, reqdata):
+            msg = u'Webhook signature verification failed\n'
+            self.log.warning(msg.rstrip('\n')) # pylint: disable=no-member
+            req.send(msg.encode('utf-8'), 'text/plain', 403)
+
         output = u'Running hook on %s\n' % (reponame or '(default)')
 
         output += u'* Updating clone\n'
@@ -898,7 +905,6 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         output += u'* Synchronizing with clone\n'
         repos.sync()
 
-        reqdata = req.read()
         try:
             payload = json.loads(reqdata)
             revs = [commit['id']
