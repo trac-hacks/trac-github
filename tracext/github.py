@@ -875,15 +875,6 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             self.log.warning(u'Method not allowed (%s)' % req.method)
             req.send(msg.encode('utf-8'), 'text/plain', 405)
 
-        event = req.get_header('X-GitHub-Event')
-        if event == 'ping':
-            payload = json.loads(req.read())
-            req.send(payload['zen'].encode('utf-8'), 'text/plain', 200)
-        elif event != 'push':
-            msg = u'Only ping and push are supported\n'
-            self.log.warning(msg.rstrip('\n'))
-            req.send(msg.encode('utf-8'), 'text/plain', 400)
-
         # Verify the event's signature
         reqdata = req.read()
         signature = req.get_header('X-Hub-Signature')
@@ -891,6 +882,15 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             msg = u'Webhook signature verification failed\n'
             self.log.warning(msg.rstrip('\n')) # pylint: disable=no-member
             req.send(msg.encode('utf-8'), 'text/plain', 403)
+
+        event = req.get_header('X-GitHub-Event')
+        if event == 'ping':
+            payload = json.loads(reqdata)
+            req.send(payload['zen'].encode('utf-8'), 'text/plain', 200)
+        elif event != 'push':
+            msg = u'Only ping and push are supported\n'
+            self.log.warning(msg.rstrip('\n'))
+            req.send(msg.encode('utf-8'), 'text/plain', 400)
 
         output = u'Running hook on %s\n' % (reponame or '(default)')
 

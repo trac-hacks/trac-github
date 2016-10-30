@@ -915,6 +915,35 @@ class GitHubPostCommitHookTests(TracGitHubTests):
             urllib2.urlopen(request)
 
 
+class GitHubPostCommitHookWithSignedWebHookTests(TracGitHubTests):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.createGitRepositories()
+        cls.createTracEnvironment(webhook_secret='6c12713595df9247974fa0f2f99b94c815f242035c49c7f009892bfd7d9f0f98')
+        cls.startTracd()
+        cls.env = Environment(ENV)
+
+    def testUnsignedPing(self):
+        payload = {'zen': "Readability counts."}
+        headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'ping'}
+        request = urllib2.Request(URL + '/github', json.dumps(payload), headers)
+        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 403: Forbidden$'):
+            urllib2.urlopen(request).read()
+
+    def testSignedPing(self):
+        # Correct signature can be generated with OpenSSL:
+        #  $> printf '{"zen": "Echo me"}\n' | openssl dgst -sha256 -hmac $webhook_secret
+        payload = {'zen': "Echo me"}
+        signature = "sha256=cacc93c2df1b21313e16d8690fc21e56229b6a9525e7016db38bdf9bad708fed"
+        headers = {'Content-Type': 'application/json',
+                   'X-GitHub-Event': 'ping',
+                   'X-Hub-Signature': signature}
+        request = urllib2.Request(URL + '/github', json.dumps(payload) + '\n', headers)
+        output = urllib2.urlopen(request).read()
+        self.assertEqual(output, "Echo me")
+
+
 class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
 
     @classmethod
