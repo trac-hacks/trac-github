@@ -619,21 +619,28 @@ class GitHubGroupsProvider(Component):
         formatted_url = github_api_url + url.format(*(urllib.quote(str(x)) for x in args))
         access_token = _config_secret(self.access_token)
         self.log.debug("Hitting GitHub API endpoint %s with user %s", formatted_url, self.username) # pylint: disable=no-member
+        results = []
         try:
-            req = requests.get(formatted_url, auth=(self.username, access_token))
-            if req.status_code != 200:
-                try:
-                    message = req.json()['message']
-                except Exception: # pylint: disable=broad-except
-                    message = req.text
-                self.log.error("Error communicating with GitHub API at {}: {}".format( # pylint: disable=no-member
-                    formatted_url, message))
-                return None
+            has_next = True
+            while has_next:
+                req = requests.get(formatted_url, auth=(self.username, access_token))
+                if req.status_code != 200:
+                    try:
+                        message = req.json()['message']
+                    except Exception: # pylint: disable=broad-except
+                        message = req.text
+                    self.log.error("Error communicating with GitHub API at {}: {}".format( # pylint: disable=no-member
+                        formatted_url, message))
+                    return None
+                results.extend(req.json())
+                has_next = 'next' in req.links
+                if has_next:
+                    formatted_url = req.links['next']['url']
         except requests.exceptions.ConnectionError as rce:
             self.log.error("Exception while communicating with GitHub API at {}: {}".format( # pylint: disable=no-member
                 formatted_url, rce))
             return None
-        return req.json()
+        return results
 
     def _fetch_groups(self):
         # Fetch teams
