@@ -145,7 +145,8 @@ class GitHubLoginModule(LoginModule):
                         # ignore unverified email addresses
                         continue
                     if (self.preferred_email_domain and
-                        item['email'].endswith('@' + self.preferred_email_domain)):
+                        item['email'].lower().endswith(
+                            '@' + self.preferred_email_domain.lower())):
                         email = item['email']
                         break
                     if item['primary']:
