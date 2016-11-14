@@ -760,6 +760,33 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                               preferred_email_domain='example.org')
         self.assertEqual(email, ['lololort@example.com'])
 
+    def testPreferredEmailCaseInsensitive(self):
+        """
+        Test that the preferred email domain is honoured regardless of case.
+        """
+        answers = {
+            '/user': {
+                'user': 'trololol',
+                'login': 'trololol'
+            },
+            '/user/emails': [
+                {
+                    'email': 'lololort@example.com',
+                    'verified': True,
+                    'primary': True
+                },
+                {
+                    'email': 'lololort@EXAMPLE.NET',
+                    'verified': True,
+                    'primary': False
+                },
+            ]
+        }
+
+        email = self.getEmail(answers, request_email=True,
+                              preferred_email_domain='example.net')
+        self.assertEqual(email, ['lololort@EXAMPLE.NET'])
+
 
 class GitHubPostCommitHookTests(TracGitHubTests):
 
