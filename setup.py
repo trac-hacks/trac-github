@@ -18,4 +18,5 @@ setup(
         'github.postcommithook = tracext.github:GitHubPostCommitHook',
         'github.groups = tracext.github:GitHubGroupsProvider',
     ]},
+    test_suite='runtests',
 )
