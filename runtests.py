@@ -861,6 +861,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         ticket = Ticket(self.env)
         ticket['summary'] = 'I need a commit!'
         ticket['status'] = 'new'
+        ticket['owner'] = ''
         ticket_id = ticket.insert()
 
         ticket = Ticket(self.env, ticket_id)
@@ -875,8 +876,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.assertEqual(ticket['status'], 'closed')
         self.assertEqual(ticket['resolution'], 'fixed')
         changelog = ticket.get_changelog()
-        # Trac 1.2 generates three fields, Trac 1.0 four.
-        self.assertGreaterEqual(len(changelog), 3)
+        self.assertEqual(len(changelog), 4)
         self.assertEqual(changelog[0][2], 'comment')
         self.assertIn("here you go", changelog[0][4])
 
