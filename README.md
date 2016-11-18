@@ -35,6 +35,10 @@ Then install trac-github itself:
 
     pip install trac-github
 
+`requests_oauthlib` is also a requirement if you plan to use `GitHubLoginModule`:
+
+    pip install requests_oauthlib
+
 Setup
 -----
 
