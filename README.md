@@ -81,9 +81,13 @@ trac-github plugins:
     [github]
     repository = <user>/<project>
 
+    [trac]
+    repository_sync_per_request =   # Trac < 1.2
+
     [repositories]
     .dir = /home/trac/<project>.git
     .type = git
+    .sync_per_request = false  # Trac >= 1.2
 
 In Trac 0.12, use `tracext.git.* = enabled` instead of
 `tracopt.versioncontrol.git.* = enabled`.
