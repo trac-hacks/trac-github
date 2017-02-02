@@ -72,6 +72,7 @@ trac-github plugins:
 
     [components]
     tracext.github.GitHubPostCommitHook = enabled
+    tracext.github.GitHubMixin = enabled
     tracopt.ticket.commit_updater.* = enabled
     tracopt.versioncontrol.git.* = enabled
 
@@ -206,6 +207,7 @@ To enable it, edit `trac.ini` as follows:
     trac.versioncontrol.web_ui.changeset.ChangesetModule = disabled
     trac.versioncontrol.web_ui.log.LogModule = disabled
     tracext.github.GitHubBrowser = enabled
+    tracext.github.GitHubMixin = enabled
 
 Since it replaces standard URLs of Trac, you must disable three components in
 `trac.versioncontrol.web_ui`, as shown above.
@@ -229,6 +231,7 @@ Now edit edit `trac.ini` as follows:
 
     [components]
     tracext.github.GitHubGroupsProvider = enabled
+    tracext.github.GitHubMixin = enabled
 
     [github]
 	organization = <your organization name>
