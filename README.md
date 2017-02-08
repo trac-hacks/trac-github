@@ -118,7 +118,9 @@ name if a named repository is used. See the [Trac documentation]
 for more information.
 
 Browse to the home page of your project in Trac and append `/github` to the
-URL. You should see the following message:
+URL. Append `/github/<reponame>` if you have a named repository
+(see [multiple repositories](#multiple-repositories)). You should see the
+following message:
 
     Endpoint is ready to accept GitHub notifications.
 
