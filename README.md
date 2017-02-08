@@ -452,7 +452,15 @@ Changelog
 
 ### master
 
-* Support synchronizing GitHub teams to Trac permission groups.
+* Support webhook signature verification for post commit hooks. (#114)
+* Allow passing a GitHub push webhook payload to a custom script per repository
+  that will receive GitHub's JSON on stdin for further postprocessing. (#114)
+* Improve interaction with both GitHub and non-GitHub repositories on a single
+  instance by delegating /changeset to the original ChangesetModule if enabled
+  and the GitHub module did not match. (#110)
+* Optionally request access to non-public email addresses from GitHub and allow
+  selection of an address by specifying a preferred domain. (#105)
+* Support synchronizing GitHub teams to Trac permission groups. (#104)
 
 ### 2.2
 
