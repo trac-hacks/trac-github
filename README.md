@@ -4,7 +4,7 @@ Trac - GitHub integration
 Features
 --------
 
-This Trac plugin performs three functions:
+This Trac plugin performs four functions:
 
 1. update the local git mirror used by Trac after each push to GitHub, and
    notify the new changesets to Trac;
@@ -29,7 +29,7 @@ The git plugin [is included](http://trac.edgewall.org/wiki/TracGit) in Trac >=
 1.0 — you only have to enable it in `trac.ini`. For Trac 0.12 you have to
 [install it](http://trac-hacks.org/wiki/GitPlugin):
 
-    pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
+    pip install git+https://github.com/hvr/trac-git-plugin.git
 
 Then install trac-github itself:
 
@@ -101,9 +101,9 @@ The author names that Trac caches are of the pattern
 `Full Name <email@domain.com>`. The `trac_user_rlookup` option enables
 reverse mapping from email address to Trac user id. This is necessary
 for commit ticket updater to function, and for `[trac]` options like
-[show_full_names](https://trac.edgewall.org/wiki/TracIni#/show_full_names)
+[show_full_names](https://trac.edgewall.org/wiki/TracIni#trac-show_full_names-option)
 and
-[show_email_addresses](https://trac.edgewall.org/wiki/TracIni#/show_email_addresses)
+[show_email_addresses](https://trac.edgewall.org/wiki/TracIni#trac-show_email_addresses-option)
 to be effective.
 
 Reload the web server and your repository should appear in Trac.
@@ -113,8 +113,9 @@ Perform an initial synchronization of the cache.
     trac-admin $env repository resync "(default)"
 
 Note that `"(default")` will need to be replaced with the repository
-name if a named repository is used. See the
-[Trac documentation](TracRepositoryAdmin#ReposTracIni) for more information.
+name if a named repository is used. See the [Trac documentation]
+(https://trac.edgewall.org/wiki/TracRepositoryAdmin#ReposTracIni) 
+for more information.
 
 Browse to the home page of your project in Trac and append `/github` to the
 URL. You should see the following message:
@@ -125,7 +126,8 @@ This is the URL of the endpoint.
 
 If you get a Trac error page saying "No handler matched request to /github"
 instead, the plugin isn't installed properly. Make sure you've followed the
-installation instructions correctly and search Trac's logs for errors.
+installation instructions correctly and [search Trac's logs]
+(https://trac.edgewall.org/wiki/TracTroubleshooting#ChecktheLogs) for errors.
 
 Now go to your project's settings page on GitHub. In the "Webhooks & Services"
 tab, click "Add webhook". Put the URL of the endpoint in the "Payload URL"
@@ -302,8 +304,8 @@ You can configure trac-github to only notify commits on some branches:
     [github]
     branches = master
 
-You can provide more than one branch name, and you can use [shell-style
-wildcards](http://docs.python.org/library/fnmatch):
+You can provide more than one branch name, and you can use [shell-style wildcards]
+(https://docs.python.org/2.7/library/fnmatch.html):
 
     [github]
     branches = master stable/*
@@ -389,8 +391,8 @@ In a [virtualenv](http://www.virtualenv.org/), install the requirements:
 
 or, instead of `pip install trac`:
 
-    pip install trac==0.12.4
-    pip install -e git://github.com/hvr/trac-git-plugin.git#egg=TracGit-dev
+    pip install trac==0.12.7
+    pip install -e git+https://github.com/hvr/trac-git-plugin.git
 
 *The version of PyGIT bundled with `trac-git-plugin` doesn't work with
 the `git` binary shipped with OS X. To fix it, in the virtualenv, edit
