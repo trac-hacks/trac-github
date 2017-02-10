@@ -419,6 +419,22 @@ If you put a breakpoint in the test suite, you can interact with Trac's web
 interface at [http://localhost:8765/](http://localhost:8765/) and with the git
 repositories through the command line.
 
+Release Steps
+-------------
+
+You need to be an owner of the [package on PyPI]
+(https://pypi.python.org/pypi/trac-github) to create a release. The steps assume
+you've configured a [.pypirc file]
+(https://packaging.python.org/distributing/#create-an-account).
+
+    $ virtualenv pve
+    $ . pve/bin/activate
+    $ pip install -U pip wheel setuptools twine
+    $ git clone https://github.com/trac-hacks/trac-github.git
+    $ cd trac-github
+    $ python setup.py sdist bdist_wheel
+    $ twine upload dist/*.tar.gz dist/*.whl
+
 Known issues
 ------------
 
