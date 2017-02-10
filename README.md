@@ -114,7 +114,7 @@ Perform an initial synchronization of the cache.
 
 Note that `"(default")` will need to be replaced with the repository
 name if a named repository is used. See the [Trac documentation]
-(https://trac.edgewall.org/wiki/TracRepositoryAdmin#ReposTracIni) 
+(https://trac.edgewall.org/wiki/TracRepositoryAdmin#ReposTracIni)
 for more information.
 
 Browse to the home page of your project in Trac and append `/github` to the
@@ -540,4 +540,7 @@ License
 
 This plugin is released under the BSD license.
 
-It was initially written for [Django's Trac](https://code.djangoproject.com/). Prominent users include [jQuery Trac](https://bugs.jquery.com), [jQuery UI Trac](https://bugs.jqueryui.com) and [MacPorts Trac](https://trac.macports.org).
+It was initially written for [Django's Trac](https://code.djangoproject.com/).
+Prominent users include [jQuery Trac](https://bugs.jquery.com), [jQuery UI
+Trac](https://bugs.jqueryui.com) and [MacPorts
+Trac](https://trac.macports.org).
