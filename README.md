@@ -468,7 +468,15 @@ Changelog
 
 ### master
 
-* Support synchronizing GitHub teams to Trac permission groups.
+* Support webhook signature verification for post commit hooks. (#114)
+* Allow passing a GitHub push webhook payload to a custom script per repository
+  that will receive GitHub's JSON on stdin for further postprocessing. (#114)
+* Improve interaction with both GitHub and non-GitHub repositories on a single
+  instance by delegating /changeset to the original ChangesetModule if enabled
+  and the GitHub module did not match. (#110)
+* Optionally request access to non-public email addresses from GitHub and allow
+  selection of an address by specifying a preferred domain. (#105)
+* Support synchronizing GitHub teams to Trac permission groups. (#104)
 
 ### 2.2
 
@@ -532,4 +540,4 @@ License
 
 This plugin is released under the BSD license.
 
-It was initially written for [Django's Trac](https://code.djangoproject.com/). Prominent users include [jQuery Trac](https://bugs.jquery.com) and [jQuery UI Trac](https://bugs.jqueryui.com).
+It was initially written for [Django's Trac](https://code.djangoproject.com/). Prominent users include [jQuery Trac](https://bugs.jquery.com), [jQuery UI Trac](https://bugs.jqueryui.com) and [MacPorts Trac](https://trac.macports.org).
