@@ -427,6 +427,12 @@ You need to be an owner of the [package on PyPI]
 you've configured a [.pypirc file]
 (https://packaging.python.org/distributing/#create-an-account).
 
+1. Update the [changelog](#changelog).
+2. Set `tag_build = ` in [setup.cfg]
+(https://github.com/trac-hacks/trac-github/blob/master/setup.cfg)
+3. Create the release:
+
+    ```
     $ virtualenv pve
     $ . pve/bin/activate
     $ pip install -U pip wheel setuptools twine
@@ -434,10 +440,11 @@ you've configured a [.pypirc file]
     $ cd trac-github
     $ git tag <version>
     $ git push --tags
-    $ rm -rf dist  # if reusing virtualenv, but using a new virtualenv is advised
+    $ rm -r dist  # if reusing virtualenv, but using a new virtualenv is advised
     $ python setup.py sdist bdist_wheel
     $ twine upload dist/*.tar.gz dist/*.whl
-
+    ```
+    
 Known issues
 ------------
 
