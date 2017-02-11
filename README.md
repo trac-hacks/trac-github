@@ -432,6 +432,9 @@ you've configured a [.pypirc file]
     $ pip install -U pip wheel setuptools twine
     $ git clone https://github.com/trac-hacks/trac-github.git
     $ cd trac-github
+    $ git tag <version>
+    $ git push --tags
+    $ rm -rf dist  # if reusing virtualenv, but using a new virtualenv is advised
     $ python setup.py sdist bdist_wheel
     $ twine upload dist/*.tar.gz dist/*.whl
 
@@ -466,7 +469,7 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 Changelog
 ---------
 
-### master
+### 2.3
 
 * Support webhook signature verification for post commit hooks. (#114)
 * Allow passing a GitHub push webhook payload to a custom script per repository
