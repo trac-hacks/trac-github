@@ -10,6 +10,7 @@ import hmac
 import json
 import os
 import re
+import time
 import traceback
 
 from datetime import datetime, timedelta
@@ -907,17 +908,6 @@ class GitHubPostCommitHook(GitHubMixin, Component):
 
         output = u'Running hook on %s\n' % (reponame or '(default)')
 
-        output += u'* Updating clone\n'
-        try:
-            git = repos.git.repo             # GitRepository
-        except AttributeError:
-            git = repos.repos.git.repo       # GitCachedRepository
-        git.remote('update', '--prune')
-
-        # Ensure that repos.get_changeset can find the new changesets.
-        output += u'* Synchronizing with clone\n'
-        repos.sync()
-
         try:
             payload = json.loads(reqdata)
             revs = [commit['id']
@@ -927,21 +917,43 @@ class GitHubPostCommitHook(GitHubMixin, Component):
             self.log.warning(msg.rstrip('\n'))
             req.send(msg.encode('utf-8'), 'text/plain', 400)
 
-        branches = self.get_branches(reponame)
-        added, skipped, unknown = classify_commits(revs, repos, branches)
+        # Retry for up to 5 seconds (20x with 1/4 second sleep)
+        ntries = 0
+        max_retries = 20
+        while ntries < max_retries:
+            output += u'* Updating clone\n'
+            try:
+                git = repos.git.repo             # GitRepository
+            except AttributeError:
+                git = repos.repos.git.repo       # GitCachedRepository
+            git.remote('update', '--prune')
+
+            # Ensure that repos.get_changeset can find the new changesets.
+            output += u'* Synchronizing with clone\n'
+            repos.sync()
+            branches = self.get_branches(reponame)
+            added, skipped, unknown = classify_commits(revs, repos, branches)
+            if unknown:
+                output += u'* Unknown %s\n' % describe_commits(unknown)
+                self.log.warning(u'Payload contains unknown %s.',
+                                 describe_commits(unknown))
+                time.sleep(0.25)
+                ntries += 1
+                self.log.warning(u'Retry repository update and sync on "%s": '
+                                  '%s of %s.', reponame, ntries, max_retries)
+            else:
+                break
+        else:
+            self.log.error(u"Payload contains unknown %s.",
+                           describe_commits(unknown))
 
         if added:
             output += u'* Adding %s\n' % describe_commits(added)
-            # This is where Trac gets notified of the commits in the changeset
+            # Notify Trac of the commits in the changeset
             rm.notify('changeset_added', reponame, added)
 
         if skipped:
             output += u'* Skipping %s\n' % describe_commits(skipped)
-
-        if unknown:
-            output += u'* Unknown %s\n' % describe_commits(unknown)
-            self.log.error(u'Payload contains unknown %s',
-                    describe_commits(unknown))
 
         status = 200
 
