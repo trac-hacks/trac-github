@@ -174,8 +174,8 @@ class GitHubLoginModule(LoginModule):
         return super(GitHubLoginModule, self)._do_login(req)
 
     def _reject_oauth(self, req, exc, reason=None):
-        self.log.warn("An OAuth authorization attempt was rejected due to an exception: "
-                      "%s\n%s" % (exc, traceback.format_exc()))
+        self.log.warn("An OAuth authorization attempt was rejected due to an "
+                      "exception: %s\n%s", exc, traceback.format_exc())
         if reason is None:
             reason = _("Invalid request. Please try to login again.")
         add_warning(req, reason)
@@ -782,7 +782,7 @@ class GitHubGroupsProvider(GitHubMixin, Component):
 
         if req.method != 'POST':
             msg = u'Endpoint is ready to accept GitHub Organization membership notifications.\n'
-            self.log.warning(u'Method not allowed (%s)' % req.method) # pylint: disable=no-member
+            self.log.warning(u'Method not allowed (%s)', req.method) # pylint: disable=no-member
             req.send(msg.encode('utf-8'), 'text/plain', 405)
 
         event = req.get_header('X-GitHub-Event')
@@ -885,7 +885,7 @@ class GitHubPostCommitHook(GitHubMixin, Component):
 
         if req.method != 'POST':
             msg = u'Endpoint is ready to accept GitHub notifications.\n'
-            self.log.warning(u'Method not allowed (%s)' % req.method)
+            self.log.warning(u'Method not allowed (%s)', req.method)
             req.send(msg.encode('utf-8'), 'text/plain', 405)
 
         # Verify the event's signature
