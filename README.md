@@ -385,7 +385,8 @@ generate a new key and pick a new `Host` value for each new repository.
 Development
 -----------
 
-In a [virtualenv](http://www.virtualenv.org/), install the requirements:
+In a [virtualenv](https://virtualenv.pypa.io/en/stable/), install the 
+requirements:
 
     pip install trac
     pip install coverage      # if you want to run the tests under coverage
@@ -418,6 +419,32 @@ Run the tests under coverage with:
 If you put a breakpoint in the test suite, you can interact with Trac's web
 interface at [http://localhost:8765/](http://localhost:8765/) and with the git
 repositories through the command line.
+
+Running `tracd` ([TracStandalone](https://trac.edgewall.org/wiki/TracStandalone)) 
+is the most convenient way to develop Trac from your workstation. Your local 
+instance of `tracd` can be exposed to the internet using [ngrok]
+(https://ngrok.com/). Download, extract and run `ngrok`:
+
+    unzip ngrok-*.zip
+    ngrok http 8000 --log ngrok.log
+
+The `ngrok` window will display a forwarding URL, for example:
+
+    Forwarding                    https://abd75d3e.ngrok.io -> localhost:8000
+
+The URL will be used for configuring the webhook and will change 
+each time you restart ngrok. See the [ngrok docs]
+(https://ngrok.com/docs) for additional configuration options.
+
+Run `tracd` on the port you specified to `ngrok`:
+
+    tracd -r -s -p 8000 /path/to/trac/env
+
+Complete the standard configuration steps in [setup](#setup). See
+the [Trac docs]
+(https://trac.edgewall.org/wiki/TracDev/DevelopmentEnvironmentSetup)
+for additional information on setting up a Trac development environment.
+
 
 Release Steps
 -------------
