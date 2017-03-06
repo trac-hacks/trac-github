@@ -25,4 +25,5 @@ setup(
         'github.groups = tracext.github:GitHubGroupsProvider',
     ]},
     test_suite='runtests',
+    tests_require='lxml',
 )
