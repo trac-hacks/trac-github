@@ -247,6 +247,14 @@ class GitHubBrowser(GitHubMixin, ChangesetModule):
     repository = Option('github', 'repository', '',
             doc="Repository name on GitHub (<user>/<project>)")
 
+    # IPermissionRequestor methods
+
+    def get_permission_actions(self):
+        # BROWSER_VIEW & FILE_VIEW defined by disabled BrowserModule,
+        # but needed for [timeline] changeset_show_files option
+        return ['BROWSER_VIEW', 'FILE_VIEW'] + \
+               super(GitHubBrowser, self).get_permission_actions()
+
     # IRequestHandler methods
 
     def match_request(self, req):
