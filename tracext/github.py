@@ -22,7 +22,7 @@ import trac
 from trac.cache import cached
 from trac.config import ListOption, BoolOption, Option
 from trac.core import Component, implements
-from trac.perm import IPermissionGroupProvider
+from trac.perm import IPermissionGroupProvider, IPermissionPolicy
 from trac.util.translation import _
 from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
@@ -246,14 +246,6 @@ class GitHubBrowser(GitHubMixin, ChangesetModule):
 
     repository = Option('github', 'repository', '',
             doc="Repository name on GitHub (<user>/<project>)")
-
-    # IPermissionRequestor methods
-
-    def get_permission_actions(self):
-        # BROWSER_VIEW & FILE_VIEW defined by disabled BrowserModule,
-        # but needed for [timeline] changeset_show_files option
-        return ['BROWSER_VIEW', 'FILE_VIEW'] + \
-               super(GitHubBrowser, self).get_permission_actions()
 
     # IRequestHandler methods
 
@@ -863,6 +855,34 @@ class GitHubGroupsProvider(GitHubMixin, Component):
             req.send(u'success'.encode('utf-8'), 'text/plain', 200)
         else:
             req.send(u'failure'.encode('utf-8'), 'text/plain', 500)
+
+
+class GitHubPolicy(Component):
+    """Permission policy for trac-github integration
+
+    Grants `FILE_VIEW` and `BROWSER_VIEW` to users that possess
+    `CHANGESET_VIEW`. `FILE_VIEW` and `BROWSER_VIEW` are needed for the
+    [[TracIni#timeline-changeset_show_files-option|[timeline] changeset_show_files]]
+    option to be effective when enabled (value not `0`). With the
+    `BrowserModule` disabled, `FILE_VIEW` and `BROWSER_VIEW` are only used
+    for enforcing the visibility of files in the timeline.
+
+    Add the permission policy before `DefaultPermissionsPolicy`. It is
+    usually correct to make it the first entry in the list.
+
+    The following will be correct for a Trac 1.2 installation that had
+    the default value for `permission_policies`.
+    {{{#!ini
+    [trac]
+    permission_policies = GitHubPolicy, ReadonlyWikiPolicy, DefaultPermissionPolicy, LegacyAttachmentPolicy
+    }}}
+    """
+    implements(IPermissionPolicy)
+
+    def check_permission(self, action, username, resource, perm):
+        if action in ('FILE_VIEW', 'BROWSER_VIEW'):
+            return 'CHANGESET_VIEW' in req.perm
+
 
 class GitHubPostCommitHook(GitHubMixin, Component):
     implements(IRequestHandler)
