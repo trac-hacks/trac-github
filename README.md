@@ -216,6 +216,15 @@ To enable it, edit `trac.ini` as follows:
 Since it replaces standard URLs of Trac, you must disable three components in
 `trac.versioncontrol.web_ui`, as shown above.
 
+With the `BROWSER_MODULE` disabled the `BROWSER_VIEW` and `FILE_VIEW` permissions will no longer be available. The permissions are checked when rendering files in the timeline, when `[timeline]` `changeset_show_files` is non-zero. Enabling the permisison policy will make the list of files visible in the timeline for users that possess `CHANGESET_VIEW`.
+
+Add the permission policy before `DefaultPermissionsPolicy`. It is usually correct to make it the first entry in the list.
+
+The following will be correct for a Trac 1.2 installation that had the default value for `permission_policies`.
+
+    [trac]
+    permission_policies = GitHubPolicy, ReadonlyWikiPolicy, DefaultPermissionPolicy, LegacyAttachmentPolicy
+
 ### Group Synchronization
 
 GitHub teams can be synced to Trac permission groups using
