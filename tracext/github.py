@@ -881,7 +881,7 @@ class GitHubPolicy(Component):
 
     def check_permission(self, action, username, resource, perm):
         if action in ('FILE_VIEW', 'BROWSER_VIEW'):
-            return 'CHANGESET_VIEW' in req.perm
+            return 'CHANGESET_VIEW' in perm
 
 
 class GitHubPostCommitHook(GitHubMixin, Component):
