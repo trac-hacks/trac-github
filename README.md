@@ -514,6 +514,9 @@ Changelog
 
 ### 2.3
 
+* Add configuration option for path prefix of login and logout. (#127)
+* Add `GitHubPolicy` permission policy to make `[timeline]`
+  `changeset_show_file` option work correctly. (#126)
 * Support webhook signature verification for post commit hooks. (#114)
 * Allow passing a GitHub push webhook payload to a custom script per repository
   that will receive GitHub's JSON on stdin for further postprocessing. (#114)
