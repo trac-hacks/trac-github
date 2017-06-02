@@ -42,6 +42,14 @@ def _config_secret(value):
 
 class GitHubLoginModule(LoginModule):
 
+    auth_path_prefix = Option(
+        'github', 'auth_path_prefix', '/github',
+        doc="""Prefix for the login and logout paths. Defaults to `/github`,
+            which avoids interferring with Trac's !LoginModule. An empty value
+            should be used if there are no other authentication modules using
+            the paths `/login` and `/logout`.
+            """)
+
     client_id = Option(
         'github', 'client_id', '',
         doc="""Client ID for the OAuth Application on GitHub.
@@ -70,34 +78,35 @@ class GitHubLoginModule(LoginModule):
             # Use the same names as LoginModule to avoid duplicates.
             yield ('metanav', 'login', _('logged in as %(user)s',
                                          user=req.authname))
+            logout_href = req.href('%s/logout' % self.auth_path_prefix)
             from pkg_resources import parse_version
             if parse_version(trac.__version__) < parse_version('1.0.2'):
-                yield ('metanav', 'logout',
-                       tag.a(_('Logout'), href=req.href.github('logout')))
+                yield ('metanav', 'logout', tag.a(_('Logout'), logout_href))
             else:
                 yield ('metanav', 'logout',
                        tag.form(tag.div(tag.button(_('Logout'),
                                                    name='logout',
                                                    type='submit')),
-                                action=req.href.github('logout'),
-                                method='post', id='logout',
+                                action=logout_href, method='post', id='logout',
                                 class_='trac-logout'))
         else:
-            # Use a different name from LoginModule to allow both in parallel.
             yield ('metanav', 'github_login',
-                   tag.a(_('GitHub Login'), href=req.href.github('login')))
+                   tag.a(_('GitHub Login'),
+                         href=req.href('%s/login' % self.auth_path_prefix)))
 
     # IRequestHandler methods
 
     def match_request(self, req):
-        return re.match('/github/(login|oauth|logout)/?$', req.path_info)
+        return re.match('/github/oauth/?$', req.path_info) or \
+               re.match('%s/(login|logout)/?$' % self.auth_path_prefix,
+                        req.path_info)
 
     def process_request(self, req):
-        if req.path_info.startswith('/github/login'):
+        if req.path_info.startswith('%s/login' % self.auth_path_prefix):
             self._do_login(req)
         elif req.path_info.startswith('/github/oauth'):
             self._do_oauth(req)
-        elif req.path_info.startswith('/github/logout'):
+        elif req.path_info.startswith('%s/logout' % self.auth_path_prefix):
             self._do_logout(req)
         self._redirect_back(req)
 
