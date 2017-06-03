@@ -97,14 +97,13 @@ class GitHubLoginModule(LoginModule):
     # IRequestHandler methods
 
     def match_request(self, req):
-        return re.match('/github/oauth/?$', req.path_info) or \
-               re.match('%s/(login|logout)/?$' % self.auth_path_prefix,
-                        req.path_info)
+        return re.match('%s/(login|oauth|logout)/?$'
+                        % re.escape(self.auth_path_prefix), req.path_info)
 
     def process_request(self, req):
         if req.path_info.startswith('%s/login' % self.auth_path_prefix):
             self._do_login(req)
-        elif req.path_info.startswith('/github/oauth'):
+        elif req.path_info.startswith('%s/oauth' % self.auth_path_prefix):
             self._do_oauth(req)
         elif req.path_info.startswith('%s/logout' % self.auth_path_prefix):
             self._do_logout(req)
@@ -199,7 +198,7 @@ class GitHubLoginModule(LoginModule):
         scope = ['']
         if self.request_email:
             scope = ['user:email']
-        redirect_uri = req.abs_href.github('oauth')
+        redirect_uri = req.abs_href('%s/oauth' % self.auth_path_prefix)
         # Inner import to avoid a hard dependency on requests-oauthlib.
         from requests_oauthlib import OAuth2Session
         return OAuth2Session(
