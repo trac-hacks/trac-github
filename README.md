@@ -512,11 +512,14 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 Changelog
 ---------
 
-### 2.3
+### 2.4
 
 * Add configuration option for path prefix of login and logout. (#127)
 * Add `GitHubPolicy` permission policy to make `[timeline]`
   `changeset_show_file` option work correctly. (#126)
+
+### 2.3
+
 * Support webhook signature verification for post commit hooks. (#114)
 * Allow passing a GitHub push webhook payload to a custom script per repository
   that will receive GitHub's JSON on stdin for further postprocessing. (#114)
