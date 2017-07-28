@@ -512,7 +512,7 @@ for git repositories. If you have an idea to fix it, please submit a patch!
 Changelog
 ---------
 
-### 2.4
+### 2.4 (not yet released)
 
 * Add configuration option for path prefix of login and logout. (#127)
 * Add `GitHubPolicy` permission policy to make `[timeline]`
