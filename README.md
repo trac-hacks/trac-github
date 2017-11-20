@@ -113,8 +113,8 @@ Perform an initial synchronization of the cache.
     trac-admin $env repository resync "(default)"
 
 Note that `"(default")` will need to be replaced with the repository
-name if a named repository is used. See the [Trac documentation]
-(https://trac.edgewall.org/wiki/TracRepositoryAdmin#ReposTracIni)
+name if a named repository is used. See the
+[Trac documentation](https://trac.edgewall.org/wiki/TracRepositoryAdmin#ReposTracIni)
 for more information.
 
 Browse to the home page of your project in Trac and append `/github` to the
@@ -128,8 +128,9 @@ This is the URL of the endpoint.
 
 If you get a Trac error page saying "No handler matched request to /github"
 instead, the plugin isn't installed properly. Make sure you've followed the
-installation instructions correctly and [search Trac's logs]
-(https://trac.edgewall.org/wiki/TracTroubleshooting#ChecktheLogs) for errors.
+installation instructions correctly and
+[search Trac's logs](https://trac.edgewall.org/wiki/TracTroubleshooting#ChecktheLogs)
+for errors.
 
 Now go to your project's settings page on GitHub. In the "Webhooks & Services"
 tab, click "Add webhook". Put the URL of the endpoint in the "Payload URL"
@@ -315,8 +316,8 @@ You can configure trac-github to only notify commits on some branches:
     [github]
     branches = master
 
-You can provide more than one branch name, and you can use [shell-style wildcards]
-(https://docs.python.org/2.7/library/fnmatch.html):
+You can provide more than one branch name, and you can use
+[shell-style wildcards](https://docs.python.org/2.7/library/fnmatch.html):
 
     [github]
     branches = master stable/*
@@ -431,8 +432,8 @@ repositories through the command line.
 
 Running `tracd` ([TracStandalone](https://trac.edgewall.org/wiki/TracStandalone)) 
 is the most convenient way to develop Trac from your workstation. Your local 
-instance of `tracd` can be exposed to the internet using [ngrok]
-(https://ngrok.com/). Download, extract and run `ngrok`:
+instance of `tracd` can be exposed to the internet using
+[ngrok](https://ngrok.com/). Download, extract and run `ngrok`:
 
     unzip ngrok-*.zip
     ngrok http 8000 --log ngrok.log
@@ -442,30 +443,29 @@ The `ngrok` window will display a forwarding URL, for example:
     Forwarding                    https://abd75d3e.ngrok.io -> localhost:8000
 
 The URL will be used for configuring the webhook and will change 
-each time you restart ngrok. See the [ngrok docs]
-(https://ngrok.com/docs) for additional configuration options.
+each time you restart ngrok. See the
+[ngrok docs](https://ngrok.com/docs) for additional configuration options.
 
 Run `tracd` on the port you specified to `ngrok`:
 
     tracd -r -s -p 8000 /path/to/trac/env
 
-Complete the standard configuration steps in [setup](#setup). See
-the [Trac docs]
-(https://trac.edgewall.org/wiki/TracDev/DevelopmentEnvironmentSetup)
+Complete the standard configuration steps in [setup](#setup). See the
+[Trac docs](https://trac.edgewall.org/wiki/TracDev/DevelopmentEnvironmentSetup)
 for additional information on setting up a Trac development environment.
 
 
 Release Steps
 -------------
 
-You need to be an owner of the [package on PyPI]
-(https://pypi.python.org/pypi/trac-github) to create a release. The steps assume
-you've configured a [.pypirc file]
-(https://packaging.python.org/distributing/#create-an-account).
+You need to be an owner of the 
+[package on PyPI](https://pypi.python.org/pypi/trac-github) to create a release.
+The steps assume you've configured a 
+[.pypirc file](https://packaging.python.org/distributing/#create-an-account).
 
 1. Update the [changelog](#changelog).
-2. Set `tag_build = ` in [setup.cfg]
-(https://github.com/trac-hacks/trac-github/blob/master/setup.cfg)
+2. Set `tag_build = ` in 
+ [setup.cfg](https://github.com/trac-hacks/trac-github/blob/master/setup.cfg)
 3. Create the release:
 
     ```
