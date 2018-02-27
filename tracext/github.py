@@ -28,7 +28,7 @@ from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManag
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
 from trac.web.api import IRequestHandler, RequestDone
 from trac.web.auth import LoginModule
-from trac.web.chrome import add_warning
+from trac.web.chrome import add_warning, add_script
 
 def _config_secret(value):
     if re.match(r'[A-Z_]+', value):
@@ -68,6 +68,13 @@ class GitHubLoginModule(LoginModule):
         'github', 'preferred_email_domain', '',
         doc="Prefer email address under this domain over the primary address.")
 
+    fontawesome_url = Option(
+        'github', 'fontawesome_url',
+        'https://use.fontawesome.com/releases/v5.0.7/js/all.js',
+        doc='This plugin uses Font Awesome to provide the GitHub icon. '
+            'Set the URL to the FA JavaScript to use here, or set to empty '
+            'to disable the icon altogether.')
+
     # INavigationContributor methods
 
     def get_active_navigation_item(self, req):
@@ -90,9 +97,14 @@ class GitHubLoginModule(LoginModule):
                                 action=logout_href, method='post', id='logout',
                                 class_='trac-logout'))
         else:
+            text = _('GitHub Login')
+            if self.fontawesome_url:
+                add_script(req, self.fontawesome_url)
+                text = tag(tag.i(class_='fab fa-github-alt'), ' ', text)
+
             yield ('metanav', 'github_login',
-                   tag.a(_('GitHub Login'),
-                         href=req.href('%s/login' % self.auth_path_prefix)))
+                   tag.a(text, href=req.href('%s/login' %
+                                             self.auth_path_prefix)))
 
     # IRequestHandler methods
 
