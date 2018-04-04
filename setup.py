@@ -4,7 +4,7 @@
 # This software is licensed as described in the file LICENSE, which
 # you should have received as part of this distribution.
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='trac-github',
@@ -14,7 +14,8 @@ setup(
     url='https://github.com/trac-hacks/trac-github',
     description='Trac - GitHub integration',
     download_url='https://pypi.python.org/pypi/trac-github',
-    packages=['tracext'],
+    packages=find_packages(),
+    namespace_packages=['tracext'],
     platforms='all',
     license='BSD',
     extras_require={'oauth': ['requests_oauthlib >= 0.5']},

@@ -210,7 +210,7 @@ class GitHubLoginModule(LoginModule):
 
 
 
-class GitHubMixin(Component):
+class GitHubMixin(object):
 
     webhook_secret = Option('github', 'webhook_secret', '',
                             doc="""GitHub webhook secret token.

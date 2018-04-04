@@ -514,6 +514,7 @@ Changelog
 
 ### 2.4 (not yet released)
 
+* Fix improperly configured namespace package. (#131)
 * Add configuration option for path prefix of login and logout. (#127)
 * Add `GitHubPolicy` permission policy to make `[timeline]`
   `changeset_show_file` option work correctly. (#126)
