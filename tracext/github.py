@@ -16,13 +16,12 @@ from datetime import datetime, timedelta
 
 from subprocess import Popen, PIPE, STDOUT
 
-from genshi.builder import tag
-
 import trac
 from trac.cache import cached
 from trac.config import ListOption, BoolOption, Option
 from trac.core import Component, implements
 from trac.perm import IPermissionGroupProvider, IPermissionPolicy
+from trac.util.html import html as tag
 from trac.util.translation import _
 from trac.versioncontrol.api import is_default, NoSuchChangeset, RepositoryManager
 from trac.versioncontrol.web_ui.changeset import ChangesetModule
