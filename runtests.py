@@ -754,7 +754,11 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         user = self.getUser(answers, username_prefix='github-')
         self.assertEqual(user, 'github-trololol')
 
-        errmsg, user = self.attemptHttpAuth(self.trac_env, username_prefix='github-')
+        errmsg, user = self.attemptHttpAuth(self.trac_env,
+                                            username_prefix='github-',
+                                            organization='org',
+                                            username='github-bot-user',
+                                            access_token='accesstoken')
         self.assertEqual(len(errmsg), 0,
                          "HTTP authentication should still work.")
         self.assertEqual(user, "user",
