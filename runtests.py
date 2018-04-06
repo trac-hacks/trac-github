@@ -165,6 +165,14 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('repositories', 'nogh.dir', os.path.realpath('%s/.git' % NOGHGIT))
         conf.set('repositories', 'nogh.type', 'git')
 
+        # Show changed files in timeline, which will trigger the
+        # IPermissionPolicy code paths
+        conf.set('timeline', 'changeset_show_files', '-1')
+        old_permission_policies = conf.get('trac', 'permission_policies')
+        if 'GitHubPolicy' not in old_permission_policies:
+            conf.set('trac', 'permission_policies',
+                     'GitHubPolicy, %s' % old_permission_policies)
+
         with open(CONF, 'wb') as fp:
             conf.write(fp)
 
