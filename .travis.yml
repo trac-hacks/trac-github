@@ -1,0 +1,12 @@
+language: python
+python:
+  - "2.7"
+install:
+  - pip install coverage lxml requests requests-oauthlib python-coveralls Trac
+  - pip install -e .
+  - pip freeze
+script:
+  - coverage erase
+  - ./runtests.py --with-coverage --with-trac-log
+after_success:
+  - coveralls
