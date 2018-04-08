@@ -124,7 +124,8 @@ class TracGitHubTests(unittest.TestCase):
             conf.set('git', 'cached_repository', 'true')
             conf.set('git', 'persistent_cache', 'true')
 
-        conf.add_section('github')
+        if not conf.has_section('github'):
+            conf.add_section('github')
         client_id = '01234567890123456789'
         if 'client_id' in kwargs:
             client_id = kwargs['client_id']
