@@ -15,6 +15,7 @@ import glob
 import json
 import os
 import random
+import re
 import shutil
 import signal
 import subprocess
@@ -41,6 +42,7 @@ NOGHGIT = 'test-git-nogithub'
 
 ENV = 'test-trac-github'
 CONF = '%s/conf/trac.ini' % ENV
+HTDIGEST = '%s/passwd' % ENV
 URL = 'http://localhost:8765/%s' % ENV
 SECRET = 'test-secret'
 HEADERS = {'Content-Type': 'application/json', 'X-GitHub-Event': 'push'}
@@ -148,6 +150,8 @@ class TracGitHubTests(unittest.TestCase):
             conf.set('github', 'access_token', kwargs['access_token'])
         if 'webhook_secret' in kwargs:
             conf.set('github', 'webhook_secret', kwargs['webhook_secret'])
+        if 'username_prefix' in kwargs:
+            conf.set('github', 'username_prefix', kwargs['username_prefix'])
 
         if SHOW_LOG:
             # The [logging] section already exists in the default trac.ini file.
@@ -177,6 +181,10 @@ class TracGitHubTests(unittest.TestCase):
         with open(CONF, 'wb') as fp:
             conf.write(fp)
 
+        with open(HTDIGEST, 'w') as fp:
+            # user: user, pass: pass, realm: realm
+            fp.write("user:realm:8493fbc53ba582fb4c044c456bdc40eb\n")
+
         run_resync = kwargs['resync'] if 'resync' in kwargs else True
         if run_resync:
             # Allow skipping resync for perfomance reasons if not required
@@ -200,7 +208,7 @@ class TracGitHubTests(unittest.TestCase):
         if SHOW_LOG:
             kwargs['stdout'] = sys.stdout
             kwargs['stderr'] = sys.stderr
-        cls.tracd = subprocess.Popen(tracd + ['--port', '8765', ENV], **kwargs)
+        cls.tracd = subprocess.Popen(tracd + ['--port', '8765', '--auth=*,%s,realm' % HTDIGEST, ENV], **kwargs)
 
         while True:
             try:
@@ -538,14 +546,42 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                 "An unconfigured GitHubLogin module should redirect and print "
                 "a warning on login attempts.")
 
+    def attemptHttpAuth(self, testenv, **kwargs):
+        """
+        Helper method that attempts to log in using HTTP authentication in the
+        given testenv; returns a tuple where the first item is the error
+        message in the notification box on the trac page loaded after the login
+        attempt (or an empty string on success) and the second item is the
+        username as seen by trac.
+        """
+        with TracContext(self, env=testenv, resync=False, **kwargs):
+            session = requests.Session()
+
+            # This logs into trac using HTTP authentication
+            # This adds a oauth_state parameter in the Trac session.
+            response = session.get(URL + '/login', auth=requests.auth.HTTPDigestAuth('user', 'pass'))
+            self.assertNotEqual(response.status_code, 403)
+
+            response = session.get(URL + '/newticket') # this should trigger IPermissionGroupProvider
+            self.assertEqual(response.status_code, 200)
+            tree = html.fromstring(response.content)
+            warning = ''.join(tree.xpath('//div[@id="warning"]/text()')).strip()
+            user = ''
+            match = re.match(r"logged in as (.*)",
+                             ', '.join(tree.xpath('//div[@id="metanav"]/ul/li[@class="first"]/text()')))
+            if match:
+                user = match.group(1)
+            return (warning, user)
+
     def attemptValidOauth(self, testenv, callback, **kwargs):
         """
         Helper method that runs a valid OAuth2 attempt in the given testenv
         with the given callback; returns a tuple where the first item is the
         error message in the notification box on the trac page loaded after the
-        login attempt (or an empty string on success) and the second item is
+        login attempt (or an empty string on success), the second item is
         a list of email addresses found in email fields of the preferences
-        after login.
+        after login and the third item is the username of the user that was
+        logged in as seen by trac..
         """
         ctxt_kwargs = {}
         other_kwargs = {}
@@ -579,8 +615,14 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                 response = session.get(URL + '/prefs')
                 self.assertEqual(response.status_code, 200)
                 tree = html.fromstring(response.content)
-                return (''.join(tree.xpath('//div[@id="warning"]/text()')).strip(),
-                        tree.xpath('//input[@id="email"]/@value'))
+                warning = ''.join(tree.xpath('//div[@id="warning"]/text()')).strip()
+                email = tree.xpath('//input[@id="email"]/@value')
+                user = ''
+                match = re.match(r"logged in as (.*)",
+                                 ', '.join(tree.xpath('//div[@id="metanav"]/ul/li[@class="first"]/text()')))
+                if match:
+                    user = match.group(1)
+                return (warning, email, user)
             finally:
                 # disable callback again
                 updateMockData(self.mockdata, postcallback="")
@@ -590,7 +632,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         Test that an OAuth backend that resets the connection does not crash
         the login
         """
-        errmsg, emails = self.attemptValidOauth(self.trac_env_broken, "")
+        errmsg, emails, _ = self.attemptValidOauth(self.trac_env_broken, "")
         self.assertIn(
             "Invalid request. Please try to login again.",
             errmsg,
@@ -600,7 +642,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         """Test that an OAuth backend that fails does not crash the login"""
         def cb(path, args):
             return 403, {}
-        errmsg, emails = self.attemptValidOauth(self.trac_env, cb)
+        errmsg, emails, _ = self.attemptValidOauth(self.trac_env, cb)
         self.assertIn(
             "Invalid request. Please try to login again.",
             errmsg,
@@ -621,7 +663,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         Test that accessing an unavailable GitHub API with what seems to be
         a valid OAuth2 token does not crash the login
         """
-        errmsg, emails = self.attemptValidOauth(self.trac_env_broken_api, self.oauthCallbackSuccess)
+        errmsg, emails, _ = self.attemptValidOauth(self.trac_env_broken_api, self.oauthCallbackSuccess)
         self.assertIn(
             "An error occurred while communicating with the GitHub API",
             errmsg,
@@ -632,9 +674,9 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         Test that accessing an broken GitHub API with what seems to be a valid
         OAuth2 token does not crash the login
         """
-        errmsg, emails = self.attemptValidOauth(self.trac_env_broken_api,
-                                                self.oauthCallbackSuccess,
-                                                retcode=403)
+        errmsg, emails, _ = self.attemptValidOauth(self.trac_env_broken_api,
+                                                   self.oauthCallbackSuccess,
+                                                   retcode=403)
         self.assertIn(
             "An error occurred while communicating with the GitHub API",
             errmsg,
@@ -656,7 +698,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
             }
         }
 
-        errmsg, emails = self.attemptValidOauth(
+        errmsg, emails, _ = self.attemptValidOauth(
                 self.trac_env, self.oauthCallbackSuccess, retcode=200,
                 answers=answers, request_email=True)
         self.assertIn(
@@ -666,13 +708,23 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
 
     def getEmail(self, answers, **kwargs):
         """Get and return the email address the system has chosen for the given config and answers"""
-        errmsg, emails = self.attemptValidOauth(
+        errmsg, emails, _ = self.attemptValidOauth(
                 self.trac_env, self.oauthCallbackSuccess, retcode=200,
                 answers=answers, **kwargs)
         self.assertEqual(len(errmsg), 0,
                          "Successful login should not print an error.")
 
         return emails
+
+    def getUser(self, answers, **kwargs):
+        """Get and return the user name the system has chosen for the given config and answers"""
+        errmsg, _, user = self.attemptValidOauth(
+                self.trac_env, self.oauthCallbackSuccess, retcode=200,
+                answers=answers, **kwargs)
+        self.assertEqual(len(errmsg), 0,
+                         "Successful login should not print an error.")
+
+        return user
 
     def testOauthValid(self):
         """Test that a login with a valid OAuth2 token succeeds"""
@@ -686,6 +738,31 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
 
         email = self.getEmail(answers)
         self.assertEqual(email, ['lololort@example.com'])
+        user = self.getUser(answers)
+        self.assertEqual(user, 'trololol')
+
+    def testUsernamePrefix(self):
+        """Test that setting a prefix for GitHub usernames works"""
+        answers = {
+            '/user': {
+                'user': 'trololol',
+                'email': 'lololort@example.com',
+                'login': 'trololol'
+            }
+        }
+
+        user = self.getUser(answers, username_prefix='github-')
+        self.assertEqual(user, 'github-trololol')
+
+        errmsg, user = self.attemptHttpAuth(self.trac_env,
+                                            username_prefix='github-',
+                                            organization='org',
+                                            username='github-bot-user',
+                                            access_token='accesstoken')
+        self.assertEqual(len(errmsg), 0,
+                         "HTTP authentication should still work.")
+        self.assertEqual(user, "user",
+                         "Non-GitHub-authentication should yield unprefixed usernames")
 
     def testOauthEmailIgnoresUnverified(self):
         """
@@ -1163,6 +1240,7 @@ class TracContext(object):
                     'username',
                     'access_token',
                     'webhook_secret',
+                    'username_prefix',
                     'resync')
     """ List of all valid attributes to be passed to createTracEnvironment() """
 
@@ -1195,6 +1273,8 @@ class TracContext(object):
                              group syncing. Defaults to unset.
         :param webhook_secret: Secret used to validate WebHook API calls if
                                present. Defaults to unset.
+        :param username_prefix: Prefix for GitHub usernames to allow
+                                co-existance of non-GitHub with GitHub accounts.
         :param resync: `False` to skip running `trac admin repository resync`
                        during environment setup for speed reasons. Defaults to
                        `True`.

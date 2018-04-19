@@ -39,7 +39,51 @@ def _config_secret(value):
         return value
 
 
-class GitHubLoginModule(LoginModule):
+class GitHubMixin(object):
+    username_prefix = Option('github', 'username_prefix', '',
+                             doc="A unique username prefix for all users "
+                                 "authenticated via GitHub (as opposed to any "
+                                 "other authentication method).")
+
+    webhook_secret = Option('github', 'webhook_secret', '',
+                            doc="""GitHub webhook secret token.
+                                   Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
+
+    def _verify_webhook_signature(self, signature, reqdata):
+        if not self.webhook_secret:
+            return True
+        if not signature:
+            return False
+
+        algorithm, _, expected = signature.partition("=")
+        supported_algorithms = {
+            "sha1": hashlib.sha1,
+            "sha256": hashlib.sha256,
+            "sha512": hashlib.sha512
+        }
+        if algorithm not in supported_algorithms:
+            return False
+
+        webhook_secret = _config_secret(self.webhook_secret)
+
+        hmac_hash = hmac.new(
+            webhook_secret.encode('utf-8'),
+            reqdata,
+            supported_algorithms[algorithm])
+        computed = hmac_hash.hexdigest()
+
+        return hmac.compare_digest(expected, computed)
+
+    def get_gh_repo(self, reponame):
+        key = 'repository' if is_default(reponame) else '%s.repository' % reponame
+        return self.config.get('github', key)
+
+    def get_branches(self, reponame):
+        key = 'branches' if is_default(reponame) else '%s.branches' % reponame
+        return self.config.getlist('github', key, sep=' ')
+
+
+class GitHubLoginModule(GitHubMixin, LoginModule):
 
     auth_path_prefix = Option(
         'github', 'auth_path_prefix', '/github',
@@ -174,7 +218,7 @@ class GitHubLoginModule(LoginModule):
                     reason=_("An error occurred while retrieving your email address "
                              "from the GitHub API"))
         # Small hack to pass the username to _do_login.
-        req.environ['REMOTE_USER'] = login
+        req.environ['REMOTE_USER'] = self.username_prefix + login
         # Save other available values in the session.
         req.session.setdefault('name', name or '')
         req.session.setdefault('email', email or '')
@@ -207,47 +251,6 @@ class GitHubLoginModule(LoginModule):
             redirect_uri=redirect_uri,
             state=state,
         )
-
-
-
-class GitHubMixin(object):
-
-    webhook_secret = Option('github', 'webhook_secret', '',
-                            doc="""GitHub webhook secret token.
-                                   Uppercase environment variable name, filename starting with '/' or './', or plain string.""")
-
-    def _verify_webhook_signature(self, signature, reqdata):
-        if not self.webhook_secret:
-            return True
-        if not signature:
-            return False
-
-        algorithm, _, expected = signature.partition("=")
-        supported_algorithms = {
-            "sha1": hashlib.sha1,
-            "sha256": hashlib.sha256,
-            "sha512": hashlib.sha512
-        }
-        if algorithm not in supported_algorithms:
-            return False
-
-        webhook_secret = _config_secret(self.webhook_secret)
-
-        hmac_hash = hmac.new(
-            webhook_secret.encode('utf-8'),
-            reqdata,
-            supported_algorithms[algorithm])
-        computed = hmac_hash.hexdigest()
-
-        return hmac.compare_digest(expected, computed)
-
-    def get_gh_repo(self, reponame):
-        key = 'repository' if is_default(reponame) else '%s.repository' % reponame
-        return self.config.get('github', key)
-
-    def get_branches(self, reponame):
-        key = 'branches' if is_default(reponame) else '%s.branches' % reponame
-        return self.config.getlist('github', key, sep=' ')
 
 
 class GitHubBrowser(GitHubMixin, ChangesetModule):
@@ -742,12 +745,16 @@ class GitHubGroupsProvider(GitHubMixin, Component):
         """
         if not self.organization or not self.username or not self.access_token:
             return []
+        elif (self.username_prefix and
+                not username.startswith(self.username_prefix)):
+            return []
+
         data = self._fetch_groups()
         if not data:
             self.log.error("No cached groups from GitHub available") # pylint: disable=no-member
             return []
         else:
-            return data.get(username, [])
+            return data.get(username[len(self.username_prefix):], [])
 
     # IRequestHandler methods
     _request_re = re.compile(r"/github-groups(/.*)?$")
