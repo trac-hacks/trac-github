@@ -238,15 +238,13 @@ class TracGitHubTests(unittest.TestCase):
             branch = GIT_DEFAULT_BRANCH
 
         if branch != GIT_DEFAULT_BRANCH:
-            subprocess.check_output(['git', '-C', repo, 'checkout', branch],
-                    stderr=subprocess.PIPE)
+            subprocess.check_output(['git', '-C', repo, 'checkout', branch])
         with open(os.path.join(repo, path), 'wb') as fp:
             fp.write(content)
         subprocess.check_output(['git', '-C', repo, 'add', path])
         subprocess.check_output(['git', '-C', repo, 'commit', '-m', message])
         if branch != GIT_DEFAULT_BRANCH:
-            subprocess.check_output(['git', '-C', repo, 'checkout', GIT_DEFAULT_BRANCH],
-                    stderr=subprocess.PIPE)
+            subprocess.check_output(['git', '-C', repo, 'checkout', GIT_DEFAULT_BRANCH])
         changeset = subprocess.check_output(['git', '-C', repo, 'rev-parse', 'HEAD'])
         return changeset.strip()
 
