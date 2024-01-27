@@ -12,7 +12,6 @@ Trac's testing framework isn't well suited for plugins, so we NIH'd a bit.
 import argparse
 import BaseHTTPServer
 import ConfigParser
-import glob
 import json
 import os
 import random
@@ -21,6 +20,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import traceback
@@ -40,6 +40,7 @@ import requests
 GIT = 'test-git-foo'
 ALTGIT = 'test-git-bar'
 NOGHGIT = 'test-git-nogithub'
+TESTDIR = '.'
 
 ENV = 'test-trac-github'
 CONF = '%s/conf/trac.ini' % ENV
@@ -66,6 +67,14 @@ class HttpNoRedirectHandler(urllib2.HTTPRedirectHandler):
 urllib2.install_opener(urllib2.build_opener(HttpNoRedirectHandler()))
 
 
+def d(*args):
+    """
+    Return an absolute path where the given arguments are joined and
+    prepended with the TESTDIR.
+    """
+    return os.path.join(TESTDIR, *args)
+
+
 def git_check_output(*args, **kwargs):
     """
     Run the given git command (`*args`), optionally on the given
@@ -77,7 +86,7 @@ def git_check_output(*args, **kwargs):
     if repo is None:
         cmdargs = ["git"] + list(args)
     else:
-        cmdargs = ["git", "-C", repo] + list(args)
+        cmdargs = ["git", "-C", d(repo)] + list(args)
 
     return subprocess.check_output(cmdargs, **kwargs)
 
@@ -91,7 +100,7 @@ class TracGitHubTests(unittest.TestCase):
         cls.createGitRepositories()
         cls.createTracEnvironment()
         cls.startTracd()
-        cls.env = Environment(ENV)
+        cls.env = Environment(d(ENV))
 
     @classmethod
     def tearDownClass(cls):
@@ -102,32 +111,32 @@ class TracGitHubTests(unittest.TestCase):
 
     @classmethod
     def createGitRepositories(cls):
-        git_check_output('init', GIT)
-        git_check_output('init', ALTGIT)
-        git_check_output('init', NOGHGIT)
+        git_check_output('init', d(GIT))
+        git_check_output('init', d(ALTGIT))
+        git_check_output('init', d(NOGHGIT))
         cls.makeGitCommit(GIT, 'README', 'default git repository\n')
         cls.makeGitCommit(ALTGIT, 'README', 'alternative git repository\n')
         cls.makeGitCommit(NOGHGIT, 'README', 'git repository not on GitHub\n')
-        git_check_output('clone', '--quiet', '--mirror', GIT, '%s-mirror' % GIT)
-        git_check_output('clone', '--quiet', '--mirror', ALTGIT, '%s-mirror' % ALTGIT)
+        git_check_output('clone', '--quiet', '--mirror', d(GIT), d('%s-mirror' % GIT))
+        git_check_output('clone', '--quiet', '--mirror', d(ALTGIT), d('%s-mirror' % ALTGIT))
 
     @classmethod
     def removeGitRepositories(cls):
-        shutil.rmtree(GIT)
-        shutil.rmtree(ALTGIT)
-        shutil.rmtree(NOGHGIT)
-        shutil.rmtree('%s-mirror' % GIT)
-        shutil.rmtree('%s-mirror' % ALTGIT)
+        shutil.rmtree(d(GIT))
+        shutil.rmtree(d(ALTGIT))
+        shutil.rmtree(d(NOGHGIT))
+        shutil.rmtree(d('%s-mirror' % GIT))
+        shutil.rmtree(d('%s-mirror' % ALTGIT))
 
     @classmethod
     def createTracEnvironment(cls, **kwargs):
-        subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'initenv',
+        subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'initenv',
                 'Trac - GitHub tests', 'sqlite:db/trac.db'])
-        subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'permission',
+        subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'permission',
                 'add', 'anonymous', 'TRAC_ADMIN'])
 
         conf = ConfigParser.ConfigParser()
-        with open(CONF, 'rb') as fp:
+        with open(d(CONF), 'rb') as fp:
             conf.readfp(fp)
 
         conf.add_section('components')
@@ -185,11 +194,11 @@ class TracGitHubTests(unittest.TestCase):
             conf.set('logging', 'log_level', 'DEBUG')
 
         conf.add_section('repositories')
-        conf.set('repositories', '.dir', os.path.realpath('%s-mirror' % GIT))
+        conf.set('repositories', '.dir', d('%s-mirror' % GIT))
         conf.set('repositories', '.type', 'git')
-        conf.set('repositories', 'alt.dir', os.path.realpath('%s-mirror' % ALTGIT))
+        conf.set('repositories', 'alt.dir', d('%s-mirror' % ALTGIT))
         conf.set('repositories', 'alt.type', 'git')
-        conf.set('repositories', 'nogh.dir', os.path.realpath('%s/.git' % NOGHGIT))
+        conf.set('repositories', 'nogh.dir', d(NOGHGIT, '.git'))
         conf.set('repositories', 'nogh.type', 'git')
 
         # Show changed files in timeline, which will trigger the
@@ -200,23 +209,23 @@ class TracGitHubTests(unittest.TestCase):
             conf.set('trac', 'permission_policies',
                      'GitHubPolicy, %s' % old_permission_policies)
 
-        with open(CONF, 'wb') as fp:
+        with open(d(CONF), 'wb') as fp:
             conf.write(fp)
 
-        with open(HTDIGEST, 'w') as fp:
+        with open(d(HTDIGEST), 'w') as fp:
             # user: user, pass: pass, realm: realm
             fp.write("user:realm:8493fbc53ba582fb4c044c456bdc40eb\n")
 
         run_resync = kwargs['resync'] if 'resync' in kwargs else True
         if run_resync:
             # Allow skipping resync for perfomance reasons if not required
-            subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'repository', 'resync', ''])
-            subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'repository', 'resync', 'alt'])
-            subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'repository', 'resync', 'nogh'])
+            subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'repository', 'resync', ''])
+            subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'repository', 'resync', 'alt'])
+            subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'repository', 'resync', 'nogh'])
 
     @classmethod
     def removeTracEnvironment(cls):
-        shutil.rmtree(ENV)
+        shutil.rmtree(d(ENV))
 
     @classmethod
     def startTracd(cls, **kwargs):
@@ -229,7 +238,7 @@ class TracGitHubTests(unittest.TestCase):
         if SHOW_LOG:
             kwargs['stdout'] = sys.stdout
             kwargs['stderr'] = sys.stderr
-        cls.tracd = subprocess.Popen(tracd + ['--port', '8765', '--auth=*,%s,realm' % HTDIGEST, ENV], **kwargs)
+        cls.tracd = subprocess.Popen(tracd + ['--port', '8765', '--auth=*,%s,realm' % d(HTDIGEST), d(ENV)], **kwargs)
 
         while True:
             try:
@@ -255,7 +264,7 @@ class TracGitHubTests(unittest.TestCase):
 
         if branch != GIT_DEFAULT_BRANCH:
             git_check_output('checkout', branch, repo=repo)
-        with open(os.path.join(repo, path), 'wb') as fp:
+        with open(d(repo, path), 'wb') as fp:
             fp.write(content)
         git_check_output('add', path, repo=repo)
         git_check_output('commit', '-m', message, repo=repo)
@@ -322,7 +331,7 @@ class GitHubBrowserTests(TracGitHubTests):
 
     def testNonGitHubLinkToChangeset(self):
         changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for browser tests')
-        subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'changeset', 'added', 'nogh', changeset])
+        subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'changeset', 'added', 'nogh', changeset])
         response = requests.get(URL + '/changeset/' + changeset + '/nogh', allow_redirects=False)
         self.assertEqual(response.status_code, 200)
 
@@ -352,7 +361,7 @@ class GitHubBrowserTests(TracGitHubTests):
 
     def testNonGitHubLinkToPath(self):
         changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for more browser tests')
-        subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'changeset', 'added', 'nogh', changeset])
+        subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'changeset', 'added', 'nogh', changeset])
         response = requests.get(URL + '/changeset/' + changeset + '/nogh/myfile', allow_redirects=False)
         self.assertEqual(response.status_code, 200)
 
@@ -482,14 +491,14 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         cls.trac_env_broken = trac_env_broken
         cls.trac_env_broken_api = trac_env_broken_api
 
-        with open(SECRET, 'wb') as fp:
+        with open(d(SECRET), 'wb') as fp:
             fp.write('98765432109876543210')
 
 
     @classmethod
     def tearDownClass(cls):
         cls.removeGitRepositories()
-        os.remove(SECRET)
+        os.remove(d(SECRET))
 
     def testLoginWithReqEmail(self):
         """Test that configuring request_email = true requests the user:email scope from GitHub"""
@@ -545,7 +554,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
     def testLoginWithSecretInFile(self):
         """Test that passing client_id in absolute path works"""
 
-        path = os.path.join(os.getcwd(), SECRET)
+        path = d(SECRET)
 
         with TracContext(self, client_id=path):
             self.loginAndVerifyClientId('98765432109876543210')
@@ -553,7 +562,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
     def testLoginWithSecretInRelativeFile(self):
         """Test that passing client_id in relative path works"""
 
-        path = os.path.join('.', SECRET)
+        path = './' + os.path.relpath(d(SECRET))
 
         with TracContext(self, client_id=path):
             self.loginAndVerifyClientId('98765432109876543210')
@@ -1069,7 +1078,7 @@ class GitHubPostCommitHookWithSignedWebHookTests(TracGitHubTests):
         cls.createGitRepositories()
         cls.createTracEnvironment(webhook_secret='6c12713595df9247974fa0f2f99b94c815f242035c49c7f009892bfd7d9f0f98')
         cls.startTracd()
-        cls.env = Environment(ENV)
+        cls.env = Environment(d(ENV))
 
     def testUnsignedPing(self):
         payload = {'zen': "Readability counts."}
@@ -1095,19 +1104,19 @@ class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
 
     @classmethod
     def createUpdateHook(cls):
-        with open(UPDATEHOOK, 'wb') as fp:
+        with open(d(UPDATEHOOK), 'wb') as fp:
             # simple shell script to echo back all input
             fp.write("""#!/bin/sh\nexec cat""")
             os.fchmod(fp.fileno(), 0o755)
 
     def createFailingUpdateHook(cls):
-        with open(UPDATEHOOK, 'wb') as fp:
+        with open(d(UPDATEHOOK), 'wb') as fp:
             fp.write("""#!/bin/sh\nexit 1""")
             os.fchmod(fp.fileno(), 0o755)
 
     @classmethod
     def removeUpdateHook(cls):
-        os.remove(UPDATEHOOK)
+        os.remove(d(UPDATEHOOK))
 
     @classmethod
     def setUpClass(cls):
@@ -1131,7 +1140,7 @@ class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
         self.assertEqual(output.split('\n')[-1], json.dumps(payload))
 
     def testUpdateHookExecFailure(self):
-        os.chmod(UPDATEHOOK, 0o644)
+        os.chmod(d(UPDATEHOOK), 0o644)
         self.makeGitCommit(GIT, 'bar', 'bar content\n')
         payload = self.makeGitHubHookPayload()
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 500: Internal Server Error$'):
@@ -1328,7 +1337,7 @@ class TracContext(object):
             if hasattr(self, attr):
                 kwargs[attr] = getattr(self, attr)
         self._testobj.createTracEnvironment(**kwargs)
-        self._tracenv = Environment(ENV)
+        self._tracenv = Environment(d(ENV))
 
         # Start tracd
         self._testobj.startTracd(env=self._env)
@@ -2159,11 +2168,6 @@ def get_parser():
 
 
 if __name__ == '__main__':
-    if glob.glob('test-*'):
-        print "Test data remains from previous runs, aborting."
-        print "Run `rm -rf test-*` and retry."
-        sys.exit(1)
-
     options, unittest_argv = get_parser().parse_known_args()
 
     COVERAGE = options.with_coverage
@@ -2175,4 +2179,15 @@ if __name__ == '__main__':
         TRACD_BIN = os.path.join(options.virtualenv, 'bin', TRACD_BIN)
         COVERAGE_BIN = os.path.join(options.virtualenv, 'bin', COVERAGE_BIN)
 
-    unittest.main(argv=[sys.argv[0]] + unittest_argv, exit=True)
+    TESTDIR = tempfile.mkdtemp(prefix='trac-github-test-')
+    print "Starting tests using temporary directory %r" % TESTDIR
+
+    try:
+        test_program = unittest.main(argv=[sys.argv[0]] + unittest_argv, exit=False)
+    finally:
+        shutil.rmtree(TESTDIR)
+
+    if not test_program.result.wasSuccessful():
+        sys.exit(1)
+    else:
+        sys.exit(0)
