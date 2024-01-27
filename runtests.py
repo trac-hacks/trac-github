@@ -9,6 +9,7 @@
 Trac's testing framework isn't well suited for plugins, so we NIH'd a bit.
 """
 
+import argparse
 import BaseHTTPServer
 import ConfigParser
 import glob
@@ -2120,15 +2121,22 @@ def apiMockServer(port, mockdata):
     httpd.mockdata = mockdata
     httpd.serve_forever()
 
+
+def get_parser():
+    parser = argparse.ArgumentParser("Run the test suite for trac-github")
+    parser.add_argument('--with-coverage', action='store_true', help="Enable test coverage")
+    parser.add_argument('--with-trac-log', action='store_true', help="Display logs of test trac instances")
+    return parser
+
+
 if __name__ == '__main__':
     if glob.glob('test-*'):
         print "Test data remains from previous runs, aborting."
         print "Run `rm -rf test-*` and retry."
         sys.exit(1)
-    if '--with-coverage' in sys.argv:
-        COVERAGE = True
-        sys.argv.remove('--with-coverage')
-    if '--with-trac-log' in sys.argv:
-        SHOW_LOG = True
-        sys.argv.remove('--with-trac-log')
-    unittest.main()
+
+    options, unittest_argv = get_parser().parse_known_args()
+    COVERAGE = options.with_coverage
+    SHOW_LOG = options.with_trac_log
+
+    unittest.main(argv=[sys.argv[0]] + unittest_argv, exit=True)
