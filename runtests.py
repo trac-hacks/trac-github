@@ -1121,6 +1121,11 @@ class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
     @classmethod
     def setUpClass(cls):
         super(GitHubPostCommitHookWithUpdateHookTests, cls).setUpClass()
+        # Make sure the hooks directory exists in the repo (can be disabled in some git configs)
+        try:
+            os.mkdir(d('%s-mirror' % GIT, 'hooks'))
+        except OSError:
+            pass
         cls.createUpdateHook()
 
     @classmethod
