@@ -49,8 +49,12 @@ SECRET = 'test-secret'
 HEADERS = {'Content-Type': 'application/json', 'X-GitHub-Event': 'push'}
 UPDATEHOOK = '%s-mirror/hooks/trac-github-update' % GIT
 
+# Global variables overriden when running the module (see very bottom of file)
 COVERAGE = False
 SHOW_LOG = False
+TRAC_ADMIN_BIN = 'trac-admin'
+TRACD_BIN = 'tracd'
+COVERAGE_BIN = 'coverage'
 
 
 class HttpNoRedirectHandler(urllib2.HTTPRedirectHandler):
@@ -100,9 +104,9 @@ class TracGitHubTests(unittest.TestCase):
 
     @classmethod
     def createTracEnvironment(cls, **kwargs):
-        subprocess.check_output(['trac-admin', ENV, 'initenv',
+        subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'initenv',
                 'Trac - GitHub tests', 'sqlite:db/trac.db'])
-        subprocess.check_output(['trac-admin', ENV, 'permission',
+        subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'permission',
                 'add', 'anonymous', 'TRAC_ADMIN'])
 
         conf = ConfigParser.ConfigParser()
@@ -189,9 +193,9 @@ class TracGitHubTests(unittest.TestCase):
         run_resync = kwargs['resync'] if 'resync' in kwargs else True
         if run_resync:
             # Allow skipping resync for perfomance reasons if not required
-            subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', ''])
-            subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', 'alt'])
-            subprocess.check_output(['trac-admin', ENV, 'repository', 'resync', 'nogh'])
+            subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'repository', 'resync', ''])
+            subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'repository', 'resync', 'alt'])
+            subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'repository', 'resync', 'nogh'])
 
     @classmethod
     def removeTracEnvironment(cls):
@@ -200,12 +204,11 @@ class TracGitHubTests(unittest.TestCase):
     @classmethod
     def startTracd(cls, **kwargs):
         if COVERAGE:
-            tracd = ['coverage', 'run', '--append', '--branch',
-                     '--source=tracext.github',
-                     subprocess.check_output(['which', 'tracd']).strip()]
+            tracd = [COVERAGE_BIN, 'run', '--append', '--branch',
+                     '--source=tracext.github', TRACD_BIN]
 
         else:
-            tracd = ['tracd']
+            tracd = [TRACD_BIN]
         if SHOW_LOG:
             kwargs['stdout'] = sys.stdout
             kwargs['stderr'] = sys.stderr
@@ -295,7 +298,7 @@ class GitHubBrowserTests(TracGitHubTests):
 
     def testNonGitHubLinkToChangeset(self):
         changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for browser tests')
-        subprocess.check_output(['trac-admin', ENV, 'changeset', 'added', 'nogh', changeset])
+        subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'changeset', 'added', 'nogh', changeset])
         response = requests.get(URL + '/changeset/' + changeset + '/nogh', allow_redirects=False)
         self.assertEqual(response.status_code, 200)
 
@@ -325,7 +328,7 @@ class GitHubBrowserTests(TracGitHubTests):
 
     def testNonGitHubLinkToPath(self):
         changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for more browser tests')
-        subprocess.check_output(['trac-admin', ENV, 'changeset', 'added', 'nogh', changeset])
+        subprocess.check_output([TRAC_ADMIN_BIN, ENV, 'changeset', 'added', 'nogh', changeset])
         response = requests.get(URL + '/changeset/' + changeset + '/nogh/myfile', allow_redirects=False)
         self.assertEqual(response.status_code, 200)
 
@@ -2126,6 +2129,7 @@ def get_parser():
     parser = argparse.ArgumentParser("Run the test suite for trac-github")
     parser.add_argument('--with-coverage', action='store_true', help="Enable test coverage")
     parser.add_argument('--with-trac-log', action='store_true', help="Display logs of test trac instances")
+    parser.add_argument('--virtualenv', help="Path to the virtualenv where Trac is installed")
     return parser
 
 
@@ -2136,7 +2140,13 @@ if __name__ == '__main__':
         sys.exit(1)
 
     options, unittest_argv = get_parser().parse_known_args()
+
     COVERAGE = options.with_coverage
     SHOW_LOG = options.with_trac_log
+
+    if options.virtualenv:
+        TRAC_ADMIN_BIN = os.path.join(options.virtualenv, 'bin', TRAC_ADMIN_BIN)
+        TRACD_BIN = os.path.join(options.virtualenv, 'bin', TRACD_BIN)
+        COVERAGE_BIN = os.path.join(options.virtualenv, 'bin', COVERAGE_BIN)
 
     unittest.main(argv=[sys.argv[0]] + unittest_argv, exit=True)
