@@ -55,6 +55,7 @@ SHOW_LOG = False
 TRAC_ADMIN_BIN = 'trac-admin'
 TRACD_BIN = 'tracd'
 COVERAGE_BIN = 'coverage'
+GIT_DEFAULT_BRANCH = 'main'
 
 
 class HttpNoRedirectHandler(urllib2.HTTPRedirectHandler):
@@ -143,7 +144,7 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('github', 'client_secret', client_secret)
         conf.set('github', 'repository', 'aaugustin/trac-github')
         conf.set('github', 'alt.repository', 'follower/trac-github')
-        conf.set('github', 'alt.branches', 'master stable/*')
+        conf.set('github', 'alt.branches', '%s stable/*' % GIT_DEFAULT_BRANCH)
         if 'request_email' in kwargs:
             conf.set('github', 'request_email', kwargs['request_email'])
         if 'preferred_email_domain' in kwargs:
@@ -232,16 +233,19 @@ class TracGitHubTests(unittest.TestCase):
         subprocess.check_output(['git', '-C', repo, 'branch', branch])
 
     @staticmethod
-    def makeGitCommit(repo, path, content, message='edit', branch='master'):
-        if branch != 'master':
+    def makeGitCommit(repo, path, content, message='edit', branch=None):
+        if branch is None:
+            branch = GIT_DEFAULT_BRANCH
+
+        if branch != GIT_DEFAULT_BRANCH:
             subprocess.check_output(['git', '-C', repo, 'checkout', branch],
                     stderr=subprocess.PIPE)
         with open(os.path.join(repo, path), 'wb') as fp:
             fp.write(content)
         subprocess.check_output(['git', '-C', repo, 'add', path])
         subprocess.check_output(['git', '-C', repo, 'commit', '-m', message])
-        if branch != 'master':
-            subprocess.check_output(['git', '-C', repo, 'checkout', 'master'],
+        if branch != GIT_DEFAULT_BRANCH:
+            subprocess.check_output(['git', '-C', repo, 'checkout', GIT_DEFAULT_BRANCH],
                     stderr=subprocess.PIPE)
         changeset = subprocess.check_output(['git', '-C', repo, 'rev-parse', 'HEAD'])
         return changeset.strip()
@@ -2130,6 +2134,7 @@ def get_parser():
     parser.add_argument('--with-coverage', action='store_true', help="Enable test coverage")
     parser.add_argument('--with-trac-log', action='store_true', help="Display logs of test trac instances")
     parser.add_argument('--virtualenv', help="Path to the virtualenv where Trac is installed")
+    parser.add_argument('--git-default-branch', default="main", help="The default branch used in the test repositories")
     return parser
 
 
@@ -2143,6 +2148,7 @@ if __name__ == '__main__':
 
     COVERAGE = options.with_coverage
     SHOW_LOG = options.with_trac_log
+    GIT_DEFAULT_BRANCH = options.git_default_branch
 
     if options.virtualenv:
         TRAC_ADMIN_BIN = os.path.join(options.virtualenv, 'bin', TRAC_ADMIN_BIN)
