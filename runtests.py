@@ -240,13 +240,17 @@ class TracGitHubTests(unittest.TestCase):
             kwargs['stderr'] = sys.stderr
         cls.tracd = subprocess.Popen(tracd + ['--port', '8765', '--auth=*,%s,realm' % d(HTDIGEST), d(ENV)], **kwargs)
 
-        while True:
+        waittime = 0.1
+        for _ in range(5):
             try:
                 urllib2.urlopen(URL)
             except urllib2.URLError:
-                time.sleep(0.1)
+                time.sleep(waittime)
+                waittime *= 2
             else:
                 break
+        else:
+            raise RuntimeError("Can't communicate with tracd running on port 8765")
 
     @classmethod
     def stopTracd(cls):
