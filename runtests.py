@@ -2190,6 +2190,7 @@ if __name__ == '__main__':
 
     TESTDIR = tempfile.mkdtemp(prefix='trac-github-test-')
     print "Starting tests using temporary directory %r" % TESTDIR
+    print "Using git version %s" % git_check_output('--version').strip()
 
     try:
         test_program = unittest.main(argv=[sys.argv[0]] + unittest_argv, exit=False)
