@@ -66,6 +66,22 @@ class HttpNoRedirectHandler(urllib2.HTTPRedirectHandler):
 urllib2.install_opener(urllib2.build_opener(HttpNoRedirectHandler()))
 
 
+def git_check_output(*args, **kwargs):
+    """
+    Run the given git command (`*args`), optionally on the given
+    repository (`kwargs['repo']`), return the output of that command
+    as a string.
+    """
+    repo = kwargs.pop('repo', None)
+
+    if repo is None:
+        cmdargs = ["git"] + list(args)
+    else:
+        cmdargs = ["git", "-C", repo] + list(args)
+
+    return subprocess.check_output(cmdargs, **kwargs)
+
+
 class TracGitHubTests(unittest.TestCase):
 
     cached_git = False
@@ -86,14 +102,14 @@ class TracGitHubTests(unittest.TestCase):
 
     @classmethod
     def createGitRepositories(cls):
-        subprocess.check_output(['git', 'init', GIT])
-        subprocess.check_output(['git', 'init', ALTGIT])
-        subprocess.check_output(['git', 'init', NOGHGIT])
+        git_check_output('init', GIT)
+        git_check_output('init', ALTGIT)
+        git_check_output('init', NOGHGIT)
         cls.makeGitCommit(GIT, 'README', 'default git repository\n')
         cls.makeGitCommit(ALTGIT, 'README', 'alternative git repository\n')
         cls.makeGitCommit(NOGHGIT, 'README', 'git repository not on GitHub\n')
-        subprocess.check_output(['git', 'clone', '--quiet', '--mirror', GIT, '%s-mirror' % GIT])
-        subprocess.check_output(['git', 'clone', '--quiet', '--mirror', ALTGIT, '%s-mirror' % ALTGIT])
+        git_check_output('clone', '--quiet', '--mirror', GIT, '%s-mirror' % GIT)
+        git_check_output('clone', '--quiet', '--mirror', ALTGIT, '%s-mirror' % ALTGIT)
 
     @classmethod
     def removeGitRepositories(cls):
@@ -230,7 +246,7 @@ class TracGitHubTests(unittest.TestCase):
 
     @staticmethod
     def makeGitBranch(repo, branch):
-        subprocess.check_output(['git', '-C', repo, 'branch', branch])
+        git_check_output('branch', branch, repo=repo)
 
     @staticmethod
     def makeGitCommit(repo, path, content, message='edit', branch=None):
@@ -238,14 +254,14 @@ class TracGitHubTests(unittest.TestCase):
             branch = GIT_DEFAULT_BRANCH
 
         if branch != GIT_DEFAULT_BRANCH:
-            subprocess.check_output(['git', '-C', repo, 'checkout', branch])
+            git_check_output('checkout', branch, repo=repo)
         with open(os.path.join(repo, path), 'wb') as fp:
             fp.write(content)
-        subprocess.check_output(['git', '-C', repo, 'add', path])
-        subprocess.check_output(['git', '-C', repo, 'commit', '-m', message])
+        git_check_output('add', path, repo=repo)
+        git_check_output('commit', '-m', message, repo=repo)
         if branch != GIT_DEFAULT_BRANCH:
-            subprocess.check_output(['git', '-C', repo, 'checkout', GIT_DEFAULT_BRANCH])
-        changeset = subprocess.check_output(['git', '-C', repo, 'rev-parse', 'HEAD'])
+            git_check_output('checkout', GIT_DEFAULT_BRANCH, repo=repo)
+        changeset = git_check_output('rev-parse', 'HEAD', repo=repo)
         return changeset.strip()
 
     @staticmethod
@@ -255,8 +271,14 @@ class TracGitHubTests(unittest.TestCase):
         repo = {'': GIT, 'alt': ALTGIT}[reponame]
 
         commits = []
-        log = subprocess.check_output(['git', '--git-dir=%s/.git' % repo, 'log',
-                '-%d' % n, '--branches', '--format=oneline', '--topo-order'])
+        log = git_check_output(
+            'log',
+            '-%d' % n,
+            '--branches',
+            '--format=oneline',
+            '--topo-order',
+            repo=repo
+        )
         for line in log.splitlines():
             id, _, message = line.partition(' ')
             commits.append({'id': id, 'message': message, 'distinct': True})
