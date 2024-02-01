@@ -25,7 +25,6 @@ import threading
 import time
 import traceback
 import unittest
-import urllib2
 import urlparse
 
 from lxml import html
@@ -57,14 +56,6 @@ TRAC_ADMIN_BIN = 'trac-admin'
 TRACD_BIN = 'tracd'
 COVERAGE_BIN = 'coverage'
 GIT_DEFAULT_BRANCH = 'main'
-
-
-class HttpNoRedirectHandler(urllib2.HTTPRedirectHandler):
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib2.HTTPError(req.get_full_url(), code, msg, headers, fp)
-
-urllib2.install_opener(urllib2.build_opener(HttpNoRedirectHandler()))
 
 
 def d(*args):
@@ -252,8 +243,8 @@ class TracGitHubTests(unittest.TestCase):
         waittime = 0.1
         for _ in range(5):
             try:
-                urllib2.urlopen(u())
-            except urllib2.URLError:
+                requests.get(u())
+            except requests.ConnectionError:
                 time.sleep(waittime)
                 waittime *= 2
             else:
@@ -312,8 +303,9 @@ class TracGitHubTests(unittest.TestCase):
         if not payload:
             payload = TracGitHubTests.makeGitHubHookPayload(n, reponame)
         url = u('github', reponame) if reponame else u('github')
-        request = urllib2.Request(url, json.dumps(payload), HEADERS)
-        return urllib2.urlopen(request)
+        response = requests.post(url, json=payload, headers=HEADERS, allow_redirects=False)
+        response.raise_for_status()
+        return response.text
 
 
 class GitHubBrowserTests(TracGitHubTests):
@@ -322,13 +314,9 @@ class GitHubBrowserTests(TracGitHubTests):
         A custom assertion to check that requesting the given url (GET) returns a redirection
         response (302 by default) pointed to the given redirection URL.
         """
-        try:
-            urllib2.urlopen(url)
-        except urllib2.HTTPError as exc:
-            self.assertEqual(exc.code, status)
-            self.assertEqual(exc.headers['Location'], redirection)
-        else:
-            self.fail("URL didn't redirect")
+        response = requests.get(url, allow_redirects=False)
+        self.assertEqual(response.status_code, status)
+        self.assertEqual(response.headers['Location'], redirection)
 
     def testLinkToChangeset(self):
         self.makeGitCommit(GIT, 'myfile', 'for browser tests')
@@ -375,12 +363,12 @@ class GitHubBrowserTests(TracGitHubTests):
         self.assertEqual(response.status_code, 200)
 
     def testBadChangeset(self):
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
-            urllib2.urlopen(u('changeset/1234567890'))
+        response = requests.get(u('changeset/1234567890'))
+        self.assertEqual(response.status_code, 404)
 
     def testBadUrl(self):
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
-            urllib2.urlopen(u('changesetnosuchurl'))
+        response = requests.get(u('changesetnosuchurl'))
+        self.assertEqual(response.status_code, 404)
 
     def testTimelineFiltering(self):
         self.makeGitBranch(GIT, 'stable/2.0')
@@ -395,7 +383,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'myfile', 'timeline 6\n', 'msg 6', 'unstable/2.0')
         self.openGitHubHook(3)
         self.openGitHubHook(3, 'alt')
-        html = urllib2.urlopen(u('timeline')).read()
+        html = requests.get(u('timeline')).text
         self.assertTrue('msg 1' in html)
         self.assertTrue('msg 2' in html)
         self.assertTrue('msg 3' in html)
@@ -439,7 +427,8 @@ class GitHubLoginModuleTests(TracGitHubTests):
         self.assertEqual(response.status_code, 302)
 
         response = session.get(
-            u('github/oauth') + '?code=01234567890123456789&state=wrong_state',
+            u('github/oauth'),
+            params={'code': '01234567890123456789', 'state': 'wrong_state'},
             allow_redirects=False)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers['Location'], u())
@@ -456,7 +445,7 @@ class GitHubLoginModuleTests(TracGitHubTests):
         # OAuth callback requests without state must still fail.
 
         response = session.get(
-            u('github/oauth') + '?code=01234567890123456789',
+            u('github/oauth'), params={'code': '01234567890123456789'},
             allow_redirects=False)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.headers['Location'], u())
@@ -934,20 +923,20 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
 class GitHubPostCommitHookTests(TracGitHubTests):
 
     def testDefaultRepository(self):
-        output = self.openGitHubHook(0).read()
+        output = self.openGitHubHook(0)
         self.assertEqual(output, "Running hook on (default)\n"
                                  "* Updating clone\n"
                                  "* Synchronizing with clone\n")
 
     def testAlternativeRepository(self):
-        output = self.openGitHubHook(0, 'alt').read()
+        output = self.openGitHubHook(0, 'alt')
         self.assertEqual(output, "Running hook on alt\n"
                                  "* Updating clone\n"
                                  "* Synchronizing with clone\n")
 
     def testCommit(self):
         self.makeGitCommit(GIT, 'foo', 'foo content\n')
-        output = self.openGitHubHook().read()
+        output = self.openGitHubHook()
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
@@ -956,7 +945,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
     def testMultipleCommits(self):
         self.makeGitCommit(GIT, 'bar', 'bar content\n')
         self.makeGitCommit(GIT, 'bar', 'more bar content\n')
-        output = self.openGitHubHook(2).read()
+        output = self.openGitHubHook(2)
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
@@ -967,7 +956,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'stable', 'stable branch\n', branch='stable/1.0')
         self.makeGitBranch(ALTGIT, 'unstable/1.0')
         self.makeGitCommit(ALTGIT, 'unstable', 'unstable branch\n', branch='unstable/1.0')
-        output = self.openGitHubHook(2, 'alt').read()
+        output = self.openGitHubHook(2, 'alt')
         self.assertRegexpMatches(output, r"Running hook on alt\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
@@ -978,9 +967,8 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         # Emulate self.openGitHubHook to use a non-existent commit id
         random_id = ''.join(random.choice('0123456789abcdef') for _ in range(40))
         payload = {'commits': [{'id': random_id, 'message': '', 'distinct': True}]}
-        request = urllib2.Request(u('github'), json.dumps(payload), HEADERS)
-        output = urllib2.urlopen(request).read()
-        self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
+        response = requests.post(u('github'), json=payload, headers=HEADERS)
+        self.assertRegexpMatches(response.text, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
                                          r"\* Unknown commit [0-9a-f]{40}\n")
@@ -1050,34 +1038,29 @@ class GitHubPostCommitHookTests(TracGitHubTests):
     def testPing(self):
         payload = {'zen': "Readability counts."}
         headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'ping'}
-        request = urllib2.Request(u('github'), json.dumps(payload), headers)
-        output = urllib2.urlopen(request).read()
-        self.assertEqual(output, "Readability counts.")
+        response = requests.post(u('github'), json=payload, headers=headers)
+        self.assertEqual(response.text, "Readability counts.")
 
     def testUnknownEvent(self):
         headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'pull'}
-        request = urllib2.Request(u('github'), json.dumps({}), headers)
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
-            urllib2.urlopen(request)
+        response = requests.post(u('github'), json={}, headers=headers)
+        self.assertEqual(response.status_code, 400)
 
     def testBadMethod(self):
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 405: Method Not Allowed$'):
-            urllib2.urlopen(u('github'))
+        response = requests.get(u('github'))
+        self.assertEqual(response.status_code, 405)
 
     def testBadPayload(self):
-        request = urllib2.Request(u('github'), 'foobar', HEADERS)
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
-            urllib2.urlopen(request)
+        response = requests.post(u('github'), data='foobar', headers=HEADERS)
+        self.assertEqual(response.status_code, 400)
 
     def testBadRepository(self):
-        request = urllib2.Request(u('github/nosuchrepo'), '{}', HEADERS)
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
-            urllib2.urlopen(request)
+        response = requests.post(u('github/nosuchrepo'), data='{}', headers=HEADERS)
+        self.assertEqual(response.status_code, 400)
 
     def testBadUrl(self):
-        request = urllib2.Request(u('githubnosuchurl'), '{}', HEADERS)
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
-            urllib2.urlopen(request)
+        response = requests.post(u('githubnosuchurl'), data='{}', headers=HEADERS)
+        self.assertEqual(response.status_code, 404)
 
 
 class GitHubPostCommitHookWithSignedWebHookTests(TracGitHubTests):
@@ -1092,21 +1075,19 @@ class GitHubPostCommitHookWithSignedWebHookTests(TracGitHubTests):
     def testUnsignedPing(self):
         payload = {'zen': "Readability counts."}
         headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'ping'}
-        request = urllib2.Request(u('github'), json.dumps(payload), headers)
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 403: Forbidden$'):
-            urllib2.urlopen(request).read()
+        response = requests.post(u('github'), json=payload, headers=headers)
+        self.assertEqual(response.status_code, 403)
 
     def testSignedPing(self):
         # Correct signature can be generated with OpenSSL:
-        #  $> printf '{"zen": "Echo me"}\n' | openssl dgst -sha256 -hmac $webhook_secret
+        #  $> printf '{"zen": "Echo me"}' | openssl dgst -sha256 -hmac $webhook_secret
         payload = {'zen': "Echo me"}
-        signature = "sha256=cacc93c2df1b21313e16d8690fc21e56229b6a9525e7016db38bdf9bad708fed"
+        signature = "sha256=68aef42937ffd24dd0b98d00d84b1551784c00932ab4ae22055a916264e194df"
         headers = {'Content-Type': 'application/json',
                    'X-GitHub-Event': 'ping',
                    'X-Hub-Signature': signature}
-        request = urllib2.Request(u('github'), json.dumps(payload) + '\n', headers)
-        output = urllib2.urlopen(request).read()
-        self.assertEqual(output, "Echo me")
+        response = requests.post(u('github'), json=payload, headers=headers)
+        self.assertEqual(response.text, "Echo me")
 
 
 class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
@@ -1145,7 +1126,7 @@ class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
     def testUpdateHook(self):
         self.makeGitCommit(GIT, 'foo', 'foo content\n')
         payload = self.makeGitHubHookPayload()
-        output = self.openGitHubHook(payload=payload).read()
+        output = self.openGitHubHook(payload=payload)
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
@@ -1157,15 +1138,15 @@ class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
         os.chmod(d(UPDATEHOOK), 0o644)
         self.makeGitCommit(GIT, 'bar', 'bar content\n')
         payload = self.makeGitHubHookPayload()
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 500: Internal Server Error$'):
-            output = self.openGitHubHook(payload=payload).read()
+        with self.assertRaisesRegexp(requests.HTTPError, r'^500 Server Error: Internal Server Error'):
+            output = self.openGitHubHook(payload=payload)
 
     def testUpdateHookFailure(self):
         self.createFailingUpdateHook()
         self.makeGitCommit(GIT, 'baz', 'baz content\n')
         payload = self.makeGitHubHookPayload()
-        with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 500: Internal Server Error$'):
-            output = self.openGitHubHook(payload=payload).read()
+        with self.assertRaisesRegexp(requests.HTTPError, r'^500 Server Error: Internal Server Error'):
+            output = self.openGitHubHook(payload=payload)
 
 
 class GitHubBrowserWithCacheTests(GitHubBrowserTests):
