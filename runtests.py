@@ -317,30 +317,34 @@ class TracGitHubTests(unittest.TestCase):
 
 
 class GitHubBrowserTests(TracGitHubTests):
+    def assertRequestRedirects(self, url, redirection, status=302):
+        """
+        A custom assertion to check that requesting the given url (GET) returns a redirection
+        response (302 by default) pointed to the given redirection URL.
+        """
+        try:
+            urllib2.urlopen(url)
+        except urllib2.HTTPError as exc:
+            self.assertEqual(exc.code, status)
+            self.assertEqual(exc.headers['Location'], redirection)
+        else:
+            self.fail("URL didn't redirect")
 
     def testLinkToChangeset(self):
         self.makeGitCommit(GIT, 'myfile', 'for browser tests')
-        changeset = self.openGitHubHook().read().rstrip()[-40:]
-        try:
-            urllib2.urlopen(u('changeset', changeset))
-        except urllib2.HTTPError as exc:
-            self.assertEqual(exc.code, 302)
-            self.assertEqual(exc.headers['Location'],
-                    'https://github.com/aaugustin/trac-github/commit/%s' % changeset)
-        else:
-            self.fail("URL didn't redirect")
+        changeset = self.openGitHubHook().rstrip()[-40:]
+        self.assertRequestRedirects(
+            u('changeset', changeset),
+            'https://github.com/aaugustin/trac-github/commit/%s' % changeset
+        )
 
     def testAlternateLinkToChangeset(self):
         self.makeGitCommit(ALTGIT, 'myfile', 'for browser tests')
-        changeset = self.openGitHubHook(1, 'alt').read().rstrip()[-40:]
-        try:
-            urllib2.urlopen(u('changeset', changeset, 'alt'))
-        except urllib2.HTTPError as exc:
-            self.assertEqual(exc.code, 302)
-            self.assertEqual(exc.headers['Location'],
-                    'https://github.com/follower/trac-github/commit/%s' % changeset)
-        else:
-            self.fail("URL didn't redirect")
+        changeset = self.openGitHubHook(1, 'alt').rstrip()[-40:]
+        self.assertRequestRedirects(
+            u('changeset', changeset, 'alt'),
+            'https://github.com/follower/trac-github/commit/%s' % changeset
+        )
 
     def testNonGitHubLinkToChangeset(self):
         changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for browser tests')
@@ -350,27 +354,19 @@ class GitHubBrowserTests(TracGitHubTests):
 
     def testLinkToPath(self):
         self.makeGitCommit(GIT, 'myfile', 'for more browser tests')
-        changeset = self.openGitHubHook().read().rstrip()[-40:]
-        try:
-            urllib2.urlopen(u('changeset', changeset, 'myfile'))
-        except urllib2.HTTPError as exc:
-            self.assertEqual(exc.code, 302)
-            self.assertEqual(exc.headers['Location'],
-                    'https://github.com/aaugustin/trac-github/blob/%s/myfile' % changeset)
-        else:
-            self.fail("URL didn't redirect")
+        changeset = self.openGitHubHook().rstrip()[-40:]
+        self.assertRequestRedirects(
+            u('changeset', changeset, 'myfile'),
+            'https://github.com/aaugustin/trac-github/blob/%s/myfile' % changeset
+        )
 
     def testAlternateLinkToPath(self):
         self.makeGitCommit(ALTGIT, 'myfile', 'for more browser tests')
-        changeset = self.openGitHubHook(1, 'alt').read().rstrip()[-40:]
-        try:
-            urllib2.urlopen(u('changeset', changeset, 'alt/myfile'))
-        except urllib2.HTTPError as exc:
-            self.assertEqual(exc.code, 302)
-            self.assertEqual(exc.headers['Location'],
-                    'https://github.com/follower/trac-github/blob/%s/myfile' % changeset)
-        else:
-            self.fail("URL didn't redirect")
+        changeset = self.openGitHubHook(1, 'alt').rstrip()[-40:]
+        self.assertRequestRedirects(
+            u('changeset', changeset, 'alt/myfile'),
+            'https://github.com/follower/trac-github/blob/%s/myfile' % changeset
+        )
 
     def testNonGitHubLinkToPath(self):
         changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for more browser tests')
