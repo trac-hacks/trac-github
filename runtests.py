@@ -45,7 +45,7 @@ TESTDIR = '.'
 ENV = 'test-trac-github'
 CONF = '%s/conf/trac.ini' % ENV
 HTDIGEST = '%s/passwd' % ENV
-URL = 'http://localhost:8765/%s' % ENV
+TRACD_URL = 'http://localhost:8765/%s' % ENV
 SECRET = 'test-secret'
 HEADERS = {'Content-Type': 'application/json', 'X-GitHub-Event': 'push'}
 UPDATEHOOK = '%s-mirror/hooks/trac-github-update' % GIT
@@ -73,6 +73,15 @@ def d(*args):
     prepended with the TESTDIR.
     """
     return os.path.join(TESTDIR, *args)
+
+
+def u(*path_elements):
+    """
+    Return an absolute URL where the given arguments are joined (with /)
+    and prepended with TRACD_URL.
+    """
+    url = '/'.join([TRACD_URL] + list(path_elements))
+    return url
 
 
 def git_check_output(*args, **kwargs):
@@ -243,7 +252,7 @@ class TracGitHubTests(unittest.TestCase):
         waittime = 0.1
         for _ in range(5):
             try:
-                urllib2.urlopen(URL)
+                urllib2.urlopen(u())
             except urllib2.URLError:
                 time.sleep(waittime)
                 waittime *= 2
@@ -302,7 +311,7 @@ class TracGitHubTests(unittest.TestCase):
     def openGitHubHook(n=1, reponame='', payload=None):
         if not payload:
             payload = TracGitHubTests.makeGitHubHookPayload(n, reponame)
-        url = (URL + '/github/' + reponame) if reponame else URL + '/github'
+        url = u('github', reponame) if reponame else u('github')
         request = urllib2.Request(url, json.dumps(payload), HEADERS)
         return urllib2.urlopen(request)
 
@@ -313,7 +322,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(GIT, 'myfile', 'for browser tests')
         changeset = self.openGitHubHook().read().rstrip()[-40:]
         try:
-            urllib2.urlopen(URL + '/changeset/' + changeset)
+            urllib2.urlopen(u('changeset', changeset))
         except urllib2.HTTPError as exc:
             self.assertEqual(exc.code, 302)
             self.assertEqual(exc.headers['Location'],
@@ -325,7 +334,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'myfile', 'for browser tests')
         changeset = self.openGitHubHook(1, 'alt').read().rstrip()[-40:]
         try:
-            urllib2.urlopen(URL + '/changeset/' + changeset + '/alt')
+            urllib2.urlopen(u('changeset', changeset, 'alt'))
         except urllib2.HTTPError as exc:
             self.assertEqual(exc.code, 302)
             self.assertEqual(exc.headers['Location'],
@@ -336,14 +345,14 @@ class GitHubBrowserTests(TracGitHubTests):
     def testNonGitHubLinkToChangeset(self):
         changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for browser tests')
         subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'changeset', 'added', 'nogh', changeset])
-        response = requests.get(URL + '/changeset/' + changeset + '/nogh', allow_redirects=False)
+        response = requests.get(u('changeset', changeset, 'nogh'), allow_redirects=False)
         self.assertEqual(response.status_code, 200)
 
     def testLinkToPath(self):
         self.makeGitCommit(GIT, 'myfile', 'for more browser tests')
         changeset = self.openGitHubHook().read().rstrip()[-40:]
         try:
-            urllib2.urlopen(URL + '/changeset/' + changeset + '/myfile')
+            urllib2.urlopen(u('changeset', changeset, 'myfile'))
         except urllib2.HTTPError as exc:
             self.assertEqual(exc.code, 302)
             self.assertEqual(exc.headers['Location'],
@@ -355,7 +364,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'myfile', 'for more browser tests')
         changeset = self.openGitHubHook(1, 'alt').read().rstrip()[-40:]
         try:
-            urllib2.urlopen(URL + '/changeset/' + changeset + '/alt/myfile')
+            urllib2.urlopen(u('changeset', changeset, 'alt/myfile'))
         except urllib2.HTTPError as exc:
             self.assertEqual(exc.code, 302)
             self.assertEqual(exc.headers['Location'],
@@ -366,16 +375,16 @@ class GitHubBrowserTests(TracGitHubTests):
     def testNonGitHubLinkToPath(self):
         changeset = self.makeGitCommit(NOGHGIT, 'myfile', 'for more browser tests')
         subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'changeset', 'added', 'nogh', changeset])
-        response = requests.get(URL + '/changeset/' + changeset + '/nogh/myfile', allow_redirects=False)
+        response = requests.get(u('changeset', changeset, 'nogh/myfile'), allow_redirects=False)
         self.assertEqual(response.status_code, 200)
 
     def testBadChangeset(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
-            urllib2.urlopen(URL + '/changeset/1234567890')
+            urllib2.urlopen(u('changeset/1234567890'))
 
     def testBadUrl(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
-            urllib2.urlopen(URL + '/changesetnosuchurl')
+            urllib2.urlopen(u('changesetnosuchurl'))
 
     def testTimelineFiltering(self):
         self.makeGitBranch(GIT, 'stable/2.0')
@@ -390,7 +399,7 @@ class GitHubBrowserTests(TracGitHubTests):
         self.makeGitCommit(ALTGIT, 'myfile', 'timeline 6\n', 'msg 6', 'unstable/2.0')
         self.openGitHubHook(3)
         self.openGitHubHook(3, 'alt')
-        html = urllib2.urlopen(URL + '/timeline').read()
+        html = urllib2.urlopen(u('timeline')).read()
         self.assertTrue('msg 1' in html)
         self.assertTrue('msg 2' in html)
         self.assertTrue('msg 3' in html)
@@ -409,7 +418,7 @@ class GitHubLoginModuleTests(TracGitHubTests):
         super(GitHubLoginModuleTests, cls).startTracd(**kwargs)
 
     def testLogin(self):
-        response = requests.get(URL + '/github/login', allow_redirects=False)
+        response = requests.get(u('github/login'), allow_redirects=False)
         self.assertEqual(response.status_code, 302)
 
         redirect_url = urlparse.urlparse(response.headers['Location'])
@@ -420,7 +429,7 @@ class GitHubLoginModuleTests(TracGitHubTests):
         state = params['state'][0]  # this is a random value
         self.assertEqual(params, {
             'client_id': ['01234567890123456789'],
-            'redirect_uri': [URL + '/github/oauth'],
+            'redirect_uri': [u('github/oauth')],
             'response_type': ['code'],
             'scope': [''],
             'state': [state],
@@ -430,16 +439,16 @@ class GitHubLoginModuleTests(TracGitHubTests):
         session = requests.Session()
 
         # This adds a oauth_state parameter in the Trac session.
-        response = session.get(URL + '/github/login', allow_redirects=False)
+        response = session.get(u('github/login'), allow_redirects=False)
         self.assertEqual(response.status_code, 302)
 
         response = session.get(
-            URL + '/github/oauth?code=01234567890123456789&state=wrong_state',
+            u('github/oauth') + '?code=01234567890123456789&state=wrong_state',
             allow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], URL)
+        self.assertEqual(response.headers['Location'], u())
 
-        response = session.get(URL)
+        response = session.get(u())
         self.assertEqual(response.status_code, 200)
         self.assertIn(
             "Invalid request. Please try to login again.", response.text)
@@ -451,20 +460,20 @@ class GitHubLoginModuleTests(TracGitHubTests):
         # OAuth callback requests without state must still fail.
 
         response = session.get(
-            URL + '/github/oauth?code=01234567890123456789',
+            u('github/oauth') + '?code=01234567890123456789',
             allow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], URL)
+        self.assertEqual(response.headers['Location'], u())
 
-        response = session.get(URL)
+        response = session.get(u())
         self.assertEqual(response.status_code, 200)
         self.assertIn(
             "Invalid request. Please try to login again.", response.text)
 
     def testLogout(self):
-        response = requests.get(URL + '/github/logout', allow_redirects=False)
+        response = requests.get(u('github/logout'), allow_redirects=False)
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], URL)
+        self.assertEqual(response.headers['Location'], u())
 
 class GitHubLoginModuleConfigurationTests(TracGitHubTests):
     # Append custom failure messages to the automatically generated ones
@@ -507,7 +516,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
     def testLoginWithReqEmail(self):
         """Test that configuring request_email = true requests the user:email scope from GitHub"""
         with TracContext(self, request_email=True, resync=False):
-            response = requests.get(URL + '/github/login', allow_redirects=False)
+            response = requests.get(u('github/login'), allow_redirects=False)
             self.assertEqual(response.status_code, 302)
 
             redirect_url = urlparse.urlparse(response.headers['Location'])
@@ -518,7 +527,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
             state = params['state'][0]  # this is a random value
             self.assertEqual(params, {
                 'client_id': ['01234567890123456789'],
-                'redirect_uri': [URL + '/github/oauth'],
+                'redirect_uri': [u('github/oauth')],
                 'response_type': ['code'],
                 'scope': ['user:email'],
                 'state': [state],
@@ -529,7 +538,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         Open the login page and check that the client_id in the redirect target
         matches the expected value.
         """
-        response = requests.get(URL + '/github/login', allow_redirects=False)
+        response = requests.get(u('github/login'), allow_redirects=False)
         self.assertEqual(response.status_code, 302)
 
         redirect_url = urlparse.urlparse(response.headers['Location'])
@@ -540,7 +549,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         state = params['state'][0]  # this is a random value
         self.assertEqual(params, {
             'client_id': [expected_client_id],
-            'redirect_uri': [URL + '/github/oauth'],
+            'redirect_uri': [u('github/oauth')],
             'response_type': ['code'],
             'scope': [''],
             'state': [state],
@@ -576,7 +585,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         with TracContext(self, client_id=''):
             session = requests.Session()
 
-            response = session.get(URL + '/github/login', allow_redirects=True)
+            response = session.get(u('github/login'), allow_redirects=True)
             self.assertEqual(response.status_code, 200)
 
             tree = html.fromstring(response.content)
@@ -600,10 +609,10 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
 
             # This logs into trac using HTTP authentication
             # This adds a oauth_state parameter in the Trac session.
-            response = session.get(URL + '/login', auth=requests.auth.HTTPDigestAuth('user', 'pass'))
+            response = session.get(u('login'), auth=requests.auth.HTTPDigestAuth('user', 'pass'))
             self.assertNotEqual(response.status_code, 403)
 
-            response = session.get(URL + '/newticket') # this should trigger IPermissionGroupProvider
+            response = session.get(u('newticket')) # this should trigger IPermissionGroupProvider
             self.assertEqual(response.status_code, 200)
             tree = html.fromstring(response.content)
             warning = ''.join(tree.xpath('//div[@id="warning"]/text()')).strip()
@@ -637,7 +646,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                 session = requests.Session()
 
                 # This adds a oauth_state parameter in the Trac session.
-                response = session.get(URL + '/github/login', allow_redirects=False)
+                response = session.get(u('github/login'), allow_redirects=False)
                 self.assertEqual(response.status_code, 302)
 
                 # Extract the state from the redirect
@@ -645,7 +654,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                 params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
                 state = params['state'][0]  # this is a random value
                 response = session.get(
-                    URL + '/github/oauth',
+                    u('github/oauth'),
                     params={
                         'code': '01234567890123456789',
                         'state': state
@@ -653,7 +662,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                     allow_redirects=False)
                 self.assertEqual(response.status_code, 302)
 
-                response = session.get(URL + '/prefs')
+                response = session.get(u('prefs'))
                 self.assertEqual(response.status_code, 200)
                 tree = html.fromstring(response.content)
                 warning = ''.join(tree.xpath('//div[@id="warning"]/text()')).strip()
@@ -973,7 +982,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         # Emulate self.openGitHubHook to use a non-existent commit id
         random_id = ''.join(random.choice('0123456789abcdef') for _ in range(40))
         payload = {'commits': [{'id': random_id, 'message': '', 'distinct': True}]}
-        request = urllib2.Request(URL + '/github', json.dumps(payload), HEADERS)
+        request = urllib2.Request(u('github'), json.dumps(payload), HEADERS)
         output = urllib2.urlopen(request).read()
         self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
@@ -1045,32 +1054,32 @@ class GitHubPostCommitHookTests(TracGitHubTests):
     def testPing(self):
         payload = {'zen': "Readability counts."}
         headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'ping'}
-        request = urllib2.Request(URL + '/github', json.dumps(payload), headers)
+        request = urllib2.Request(u('github'), json.dumps(payload), headers)
         output = urllib2.urlopen(request).read()
         self.assertEqual(output, "Readability counts.")
 
     def testUnknownEvent(self):
         headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'pull'}
-        request = urllib2.Request(URL + '/github', json.dumps({}), headers)
+        request = urllib2.Request(u('github'), json.dumps({}), headers)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
             urllib2.urlopen(request)
 
     def testBadMethod(self):
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 405: Method Not Allowed$'):
-            urllib2.urlopen(URL + '/github')
+            urllib2.urlopen(u('github'))
 
     def testBadPayload(self):
-        request = urllib2.Request(URL + '/github', 'foobar', HEADERS)
+        request = urllib2.Request(u('github'), 'foobar', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
             urllib2.urlopen(request)
 
     def testBadRepository(self):
-        request = urllib2.Request(URL + '/github/nosuchrepo', '{}', HEADERS)
+        request = urllib2.Request(u('github/nosuchrepo'), '{}', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 400: Bad Request$'):
             urllib2.urlopen(request)
 
     def testBadUrl(self):
-        request = urllib2.Request(URL + '/githubnosuchurl', '{}', HEADERS)
+        request = urllib2.Request(u('githubnosuchurl'), '{}', HEADERS)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 404: Not Found$'):
             urllib2.urlopen(request)
 
@@ -1087,7 +1096,7 @@ class GitHubPostCommitHookWithSignedWebHookTests(TracGitHubTests):
     def testUnsignedPing(self):
         payload = {'zen': "Readability counts."}
         headers = {'Content-Type': 'application/json', 'X-GitHub-Event': 'ping'}
-        request = urllib2.Request(URL + '/github', json.dumps(payload), headers)
+        request = urllib2.Request(u('github'), json.dumps(payload), headers)
         with self.assertRaisesRegexp(urllib2.HTTPError, r'^HTTP Error 403: Forbidden$'):
             urllib2.urlopen(request).read()
 
@@ -1099,7 +1108,7 @@ class GitHubPostCommitHookWithSignedWebHookTests(TracGitHubTests):
         headers = {'Content-Type': 'application/json',
                    'X-GitHub-Event': 'ping',
                    'X-Hub-Signature': signature}
-        request = urllib2.Request(URL + '/github', json.dumps(payload) + '\n', headers)
+        request = urllib2.Request(u('github'), json.dumps(payload) + '\n', headers)
         output = urllib2.urlopen(request).read()
         self.assertEqual(output, "Echo me")
 
@@ -1418,7 +1427,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         Test that a request does not fail even if the API refuses connections.
         """
         with TracContext(self, env=self.tracd_env_broken, **self.trac_env):
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200,
                              "Request with unresponsive API endpoint should not fail")
             self.assertEqual(response.json(), {},
@@ -1429,7 +1438,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         Test whether a request with an unconfigured GitHubGroupsProvider fails.
         """
         with TracContext(self, resync=False):
-            response = requests.get(URL + '/newticket', allow_redirects=False)
+            response = requests.get(u('newticket'), allow_redirects=False)
             self.assertEqual(response.status_code, 200,
                              "Unconfigured GitHubGroupsProvider caused requests to fail")
 
@@ -1440,7 +1449,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         self.assertNotIn('TRAC_GITHUB_ENABLE_DEBUGGING', self.tracd_env,
                          "tracd_env enables debugging, but should not; did you export TRAC_GITHUB_ENABLE_DEBUGGING?")
         with TracContext(self, env=self.tracd_env, resync=False):
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 404,
                              "Debugging API was not enabled, but did not return HTTP 404")
 
@@ -1452,7 +1461,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             '/orgs/%s/teams' % self.organization: {}
         })
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200,
                              "Request with failing API endpoint should not fail")
             self.assertEqual(response.json(), {},
@@ -1465,7 +1474,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         updateMockData(self.mockdata, retcode=404, answers={})
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200,
                              "Request with 404 API endpoint should not fail")
             self.assertEqual(response.json(), {},
@@ -1480,7 +1489,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200,
                              "Request with organization without teams should not fail")
             self.assertEqual(response.json(), {},
@@ -1533,7 +1542,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200)
 
             data = response.json()
@@ -1598,12 +1607,12 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env, **self.trac_env):
-            response = requests.get(URL + '/github-groups', allow_redirects=False)
+            response = requests.get(u('github-groups'), allow_redirects=False)
             self.assertEqual(response.status_code, 405,
                              "GET /github-groups did not return HTTP 405")
             self.assertEqual(response.text,
                              "Endpoint is ready to accept GitHub Organization membership notifications.\n")
-            response = requests.get(URL + '/github-groups/', allow_redirects=False)
+            response = requests.get(u('github-groups/'), allow_redirects=False)
             self.assertEqual(response.status_code, 405,
                              "/github-groups/ did not return 405")
             self.assertEqual(response.text,
@@ -1618,7 +1627,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env, **self.trac_env):
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'FooEvent'})
             self.assertEqual(response.status_code, 400,
@@ -1634,7 +1643,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env, **self.trac_env):
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'ping'},
                                      json={'zen': 'Echo me!'})
@@ -1651,7 +1660,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env, **self.trac_env):
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'ping'},
                                      data="Fail to parse as JSON")
@@ -1668,7 +1677,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env, **self.trac_env):
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'ping'},
                                      json=[{'bar': 'baz'}])
@@ -1725,7 +1734,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
             # Make sure the to-be-removed group exists
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200)
 
             data = response.json()
@@ -1748,7 +1757,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             })
 
             # Send the delete event
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'membership'},
                                      json=update)
@@ -1757,7 +1766,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             self.assertEqual(response.text, "success")
 
             # Check that the group is gone
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200)
 
             data = response.json()
@@ -1789,7 +1798,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
             # Send the delete event
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'membership'},
                                      json=update)
@@ -1833,7 +1842,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             })
 
             # Send the update event
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'membership'},
                                      json=update)
@@ -1842,7 +1851,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             self.assertEqual(response.text, "success")
 
             # Check that the member and group were added
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200)
 
             data = response.json()
@@ -1898,7 +1907,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             })
 
             # Send the update event
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'membership'},
                                      json=update)
@@ -1907,7 +1916,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             self.assertEqual(response.text, "success")
 
             # Check that the member and group were added
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200)
 
             data = response.json()
@@ -1963,7 +1972,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             })
 
             # Send the update event
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'membership'},
                                      json=update)
@@ -1972,7 +1981,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             self.assertEqual(response.text, "success")
 
             # Check that the member and group were added
-            response = requests.get(URL + '/github-groups-dump', allow_redirects=False)
+            response = requests.get(u('github-groups-dump'), allow_redirects=False)
             self.assertEqual(response.status_code, 200)
 
             data = response.json()
@@ -1989,7 +1998,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env, **self.trac_env_secured):
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'ping'},
                                      json={'zen': 'Echo me!'})
@@ -2006,7 +2015,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env, **self.trac_env_secured):
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={
                                          'X-GitHub-Event': 'ping',
@@ -2026,7 +2035,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         })
 
         with TracContext(self, env=self.tracd_env, **self.trac_env_secured):
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={
                                          'X-GitHub-Event': 'ping',
@@ -2049,7 +2058,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             # Correct signature can be generated with OpenSSL:
             #  $> printf '{"zen": "Echo me"}\n' | openssl dgst -sha256 -hmac $webhook_secret
             signature = "sha256=cacc93c2df1b21313e16d8690fc21e56229b6a9525e7016db38bdf9bad708fed"
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={
                                          'X-GitHub-Event': 'ping',
@@ -2081,7 +2090,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             # Change the mock to always fail
             updateMockData(self.mockdata, retcode=403)
             # Send the delete event
-            response = requests.post(URL + '/github-groups',
+            response = requests.post(u('github-groups'),
                                      allow_redirects=False,
                                      headers={'X-GitHub-Event': 'membership'},
                                      json=update)
