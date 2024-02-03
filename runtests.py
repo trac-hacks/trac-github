@@ -172,7 +172,7 @@ class TracGitHubTests(unittest.TestCase):
         conf.set('github', 'alt.repository', 'follower/trac-github')
         conf.set('github', 'alt.branches', '%s stable/*' % GIT_DEFAULT_BRANCH)
         if 'request_email' in kwargs:
-            conf.set('github', 'request_email', kwargs['request_email'])
+            conf.set('github', 'request_email', str(kwargs['request_email']))
         if 'preferred_email_domain' in kwargs:
             conf.set('github', 'preferred_email_domain', kwargs['preferred_email_domain'])
         if 'organization' in kwargs:
