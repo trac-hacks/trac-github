@@ -951,11 +951,11 @@ class GitHubPostCommitHook(GitHubMixin, Component):
         output = u'Running hook on %s\n' % (reponame or '(default)')
 
         output += u'* Updating clone\n'
-        try:
-            git = repos.git.repo             # GitRepository
-        except AttributeError:
-            git = repos.repos.git.repo       # GitCachedRepository
-        git.remote('update', '--prune')
+        try:  # GitRepository
+            storage = repos.git
+        except AttributeError:  # GitCachedRepository
+            storage = repos.repos.git
+        storage.repo.remote('update', '--prune')
 
         # Ensure that repos.get_changeset can find the new changesets.
         output += u'* Synchronizing with clone\n'
@@ -988,12 +988,11 @@ class GitHubPostCommitHook(GitHubMixin, Component):
 
         status = 200
 
-        git_dir = git.rev_parse('--git-dir').rstrip('\n')
-        hook = os.path.join(git_dir, 'hooks', 'trac-github-update')
+        hook = os.path.join(storage.repo_path, 'hooks', 'trac-github-update')
         if os.path.isfile(hook):
             output += u'* Running trac-github-update hook\n'
             try:
-                p = Popen(hook, cwd=git_dir,
+                p = Popen(hook, cwd=storage.repo_path,
                           stdin=PIPE, stdout=PIPE, stderr=STDOUT,
                           close_fds=trac.util.compat.close_fds)
             except Exception as e:
