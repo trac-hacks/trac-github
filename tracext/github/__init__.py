@@ -698,7 +698,7 @@ class GitHubGroupsProvider(GitHubMixin, Component):
 
         # Return data
         data = collections.defaultdict(list)
-        for tname, tmembers in members.iteritems():
+        for tname, tmembers in members.items():
             self.log.debug("Team members for group %r: %r", tname, tmembers) # pylint: disable=no-member
             for member in tmembers:
                 data[member].append(tname)

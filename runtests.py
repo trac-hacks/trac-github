@@ -1203,7 +1203,7 @@ class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
                 prev_link = '<http://{}{}?{}>; rel="prev"'.format(
                     self.headers['Host'],
                     path,
-                    '&'.join(('='.join((str(k), str(v))) for k, v in prevparams.iteritems()))
+                    '&'.join(('='.join((str(k), str(v))) for k, v in prevparams.items()))
                 )
                 links.append(prev_link)
             if length >= end:
@@ -1212,7 +1212,7 @@ class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
                 next_link = '<http://{}{}?{}>; rel="next"'.format(
                     self.headers['Host'],
                     path,
-                    '&'.join(('='.join((str(k), str(v))) for k, v in nextparams.iteritems()))
+                    '&'.join(('='.join((str(k), str(v))) for k, v in nextparams.items()))
                 )
                 links.append(next_link)
             if len(links) > 0:
