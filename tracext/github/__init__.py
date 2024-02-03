@@ -29,6 +29,8 @@ from trac.web.api import IRequestHandler, RequestDone
 from trac.web.auth import LoginModule
 from trac.web.chrome import add_warning
 
+import six
+
 def _config_secret(value):
     if re.match(r'[A-Z_]+', value):
         return os.environ.get(value, '')
@@ -330,9 +332,11 @@ class GitHubCachedAPI(object):
         self.api = api
         self.env = env
         self.name = fullname
-        # _fullname needs to be a string, not a unicode string, otherwise the
-        # cache object won't convert it into a hash.
-        self._fullname = fullname.encode('utf-8')
+        self._fullname = fullname
+        if six.PY2:
+            # Trac's @cached for py2 does an isinstance(..., str) so we need a native
+            # string type
+            self._fullname = fullname.encode('utf-8')
         # next try: immediately
         self._next_update = datetime.now() - timedelta(seconds=10)
         self._cached_result = self._apiresult_error()
@@ -656,10 +660,10 @@ class GitHubGroupsProvider(GitHubMixin, Component):
                     additional positional arguments.
         """
         import requests
-        import urllib
+        from six.moves.urllib.parse import quote
 
         github_api_url = os.environ.get("TRAC_GITHUB_API_URL", "https://api.github.com/")
-        formatted_url = github_api_url + url.format(*(urllib.quote(str(x)) for x in args))
+        formatted_url = github_api_url + url.format(*(quote(str(x)) for x in args))
         access_token = _config_secret(self.access_token)
         self.log.debug("Hitting GitHub API endpoint %s with user %s", formatted_url, self.username) # pylint: disable=no-member
         results = []

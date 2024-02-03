@@ -18,6 +18,9 @@ setup(
     namespace_packages=['tracext'],
     platforms='all',
     license='BSD',
+    install_requires=[
+        'six==1.16.0',
+    ],
     extras_require={'oauth': ['requests_oauthlib >= 0.5']},
     entry_points={'trac.plugins': [
         'github.browser = tracext.github:GitHubBrowser',

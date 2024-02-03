@@ -11,8 +11,6 @@ Trac's testing framework isn't well suited for plugins, so we NIH'd a bit.
 from __future__ import print_function
 
 import argparse
-import BaseHTTPServer
-import ConfigParser
 import json
 import os
 import random
@@ -26,7 +24,11 @@ import threading
 import time
 import traceback
 import unittest
-import urlparse
+
+
+from six.moves.BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer
+from six.moves.configparser import ConfigParser
+from six.moves.urllib.parse import parse_qs, urlparse
 
 from lxml import html
 
@@ -35,6 +37,7 @@ from trac.ticket.model import Ticket
 from trac.util.translation import _
 
 import requests
+import six
 
 
 GIT = 'test-git-foo'
@@ -83,6 +86,9 @@ def git_check_output(*args, **kwargs):
     as a string.
     """
     repo = kwargs.pop('repo', None)
+    kwargs.setdefault('text', True)
+    if six.PY2:
+        del kwargs['text']
 
     if repo is None:
         cmdargs = ["git"] + list(args)
@@ -136,9 +142,12 @@ class TracGitHubTests(unittest.TestCase):
         subprocess.check_output([TRAC_ADMIN_BIN, d(ENV), 'permission',
                 'add', 'anonymous', 'TRAC_ADMIN'])
 
-        conf = ConfigParser.ConfigParser()
-        with open(d(CONF), 'rb') as fp:
-            conf.readfp(fp)
+        conf = ConfigParser()
+        with open(d(CONF), 'r') as fp:
+            if six.PY2:
+                conf.readfp(fp)
+            else:
+                conf.read_file(fp)
 
         conf.add_section('components')
         conf.set('components', 'trac.versioncontrol.web_ui.browser.BrowserModule', 'disabled')
@@ -210,7 +219,7 @@ class TracGitHubTests(unittest.TestCase):
             conf.set('trac', 'permission_policies',
                      'GitHubPolicy, %s' % old_permission_policies)
 
-        with open(d(CONF), 'wb') as fp:
+        with open(d(CONF), 'w') as fp:
             conf.write(fp)
 
         with open(d(HTDIGEST), 'w') as fp:
@@ -269,7 +278,7 @@ class TracGitHubTests(unittest.TestCase):
 
         if branch != GIT_DEFAULT_BRANCH:
             git_check_output('checkout', branch, repo=repo)
-        with open(d(repo, path), 'wb') as fp:
+        with open(d(repo, path), 'w') as fp:
             fp.write(content)
         git_check_output('add', path, repo=repo)
         git_check_output('commit', '-m', message, repo=repo)
@@ -406,11 +415,11 @@ class GitHubLoginModuleTests(TracGitHubTests):
         response = requests.get(u('github/login'), allow_redirects=False)
         self.assertEqual(response.status_code, 302)
 
-        redirect_url = urlparse.urlparse(response.headers['Location'])
+        redirect_url = urlparse(response.headers['Location'])
         self.assertEqual(redirect_url.scheme, 'https')
         self.assertEqual(redirect_url.netloc, 'github.com')
         self.assertEqual(redirect_url.path, '/login/oauth/authorize')
-        params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
+        params = parse_qs(redirect_url.query, keep_blank_values=True)
         state = params['state'][0]  # this is a random value
         self.assertEqual(params, {
             'client_id': ['01234567890123456789'],
@@ -490,7 +499,7 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         cls.trac_env_broken = trac_env_broken
         cls.trac_env_broken_api = trac_env_broken_api
 
-        with open(d(SECRET), 'wb') as fp:
+        with open(d(SECRET), 'w') as fp:
             fp.write('98765432109876543210')
 
 
@@ -505,11 +514,11 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
             response = requests.get(u('github/login'), allow_redirects=False)
             self.assertEqual(response.status_code, 302)
 
-            redirect_url = urlparse.urlparse(response.headers['Location'])
+            redirect_url = urlparse(response.headers['Location'])
             self.assertEqual(redirect_url.scheme, 'https')
             self.assertEqual(redirect_url.netloc, 'github.com')
             self.assertEqual(redirect_url.path, '/login/oauth/authorize')
-            params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
+            params = parse_qs(redirect_url.query, keep_blank_values=True)
             state = params['state'][0]  # this is a random value
             self.assertEqual(params, {
                 'client_id': ['01234567890123456789'],
@@ -527,11 +536,11 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
         response = requests.get(u('github/login'), allow_redirects=False)
         self.assertEqual(response.status_code, 302)
 
-        redirect_url = urlparse.urlparse(response.headers['Location'])
+        redirect_url = urlparse(response.headers['Location'])
         self.assertEqual(redirect_url.scheme, 'https')
         self.assertEqual(redirect_url.netloc, 'github.com')
         self.assertEqual(redirect_url.path, '/login/oauth/authorize')
-        params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
+        params = parse_qs(redirect_url.query, keep_blank_values=True)
         state = params['state'][0]  # this is a random value
         self.assertEqual(params, {
             'client_id': [expected_client_id],
@@ -636,8 +645,8 @@ class GitHubLoginModuleConfigurationTests(TracGitHubTests):
                 self.assertEqual(response.status_code, 302)
 
                 # Extract the state from the redirect
-                redirect_url = urlparse.urlparse(response.headers['Location'])
-                params = urlparse.parse_qs(redirect_url.query, keep_blank_values=True)
+                redirect_url = urlparse(response.headers['Location'])
+                params = parse_qs(redirect_url.query, keep_blank_values=True)
                 state = params['state'][0]  # this is a random value
                 response = session.get(
                     u('github/oauth'),
@@ -938,7 +947,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
     def testCommit(self):
         self.makeGitCommit(GIT, 'foo', 'foo content\n')
         output = self.openGitHubHook()
-        self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
+        six.assertRegex(self, output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
                                          r"\* Adding commit [0-9a-f]{40}\n")
@@ -947,7 +956,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.makeGitCommit(GIT, 'bar', 'bar content\n')
         self.makeGitCommit(GIT, 'bar', 'more bar content\n')
         output = self.openGitHubHook(2)
-        self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
+        six.assertRegex(self, output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
                                          r"\* Adding commits [0-9a-f]{40}, [0-9a-f]{40}\n")
@@ -958,7 +967,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         self.makeGitBranch(ALTGIT, 'unstable/1.0')
         self.makeGitCommit(ALTGIT, 'unstable', 'unstable branch\n', branch='unstable/1.0')
         output = self.openGitHubHook(2, 'alt')
-        self.assertRegexpMatches(output, r"Running hook on alt\n"
+        six.assertRegex(self, output, r"Running hook on alt\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
                                          r"\* Adding commit [0-9a-f]{40}\n"
@@ -969,7 +978,7 @@ class GitHubPostCommitHookTests(TracGitHubTests):
         random_id = ''.join(random.choice('0123456789abcdef') for _ in range(40))
         payload = {'commits': [{'id': random_id, 'message': '', 'distinct': True}]}
         response = requests.post(u('github'), json=payload, headers=HEADERS)
-        self.assertRegexpMatches(response.text, r"Running hook on \(default\)\n"
+        six.assertRegex(self, response.text, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
                                          r"\* Unknown commit [0-9a-f]{40}\n")
@@ -1095,13 +1104,13 @@ class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
 
     @classmethod
     def createUpdateHook(cls):
-        with open(d(UPDATEHOOK), 'wb') as fp:
+        with open(d(UPDATEHOOK), 'w') as fp:
             # simple shell script to echo back all input
             fp.write("""#!/bin/sh\nexec cat""")
             os.fchmod(fp.fileno(), 0o755)
 
     def createFailingUpdateHook(cls):
-        with open(d(UPDATEHOOK), 'wb') as fp:
+        with open(d(UPDATEHOOK), 'w') as fp:
             fp.write("""#!/bin/sh\nexit 1""")
             os.fchmod(fp.fileno(), 0o755)
 
@@ -1128,7 +1137,7 @@ class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
         self.makeGitCommit(GIT, 'foo', 'foo content\n')
         payload = self.makeGitHubHookPayload()
         output = self.openGitHubHook(payload=payload)
-        self.assertRegexpMatches(output, r"Running hook on \(default\)\n"
+        six.assertRegex(self, output, r"Running hook on \(default\)\n"
                                          r"\* Updating clone\n"
                                          r"\* Synchronizing with clone\n"
                                          r"\* Adding commit [0-9a-f]{40}\n"
@@ -1139,14 +1148,14 @@ class GitHubPostCommitHookWithUpdateHookTests(TracGitHubTests):
         os.chmod(d(UPDATEHOOK), 0o644)
         self.makeGitCommit(GIT, 'bar', 'bar content\n')
         payload = self.makeGitHubHookPayload()
-        with self.assertRaisesRegexp(requests.HTTPError, r'^500 Server Error: Internal Server Error'):
+        with six.assertRaisesRegex(self, requests.HTTPError, r'^500 Server Error: Internal Server Error'):
             output = self.openGitHubHook(payload=payload)
 
     def testUpdateHookFailure(self):
         self.createFailingUpdateHook()
         self.makeGitCommit(GIT, 'baz', 'baz content\n')
         payload = self.makeGitHubHookPayload()
-        with self.assertRaisesRegexp(requests.HTTPError, r'^500 Server Error: Internal Server Error'):
+        with six.assertRaisesRegex(self, requests.HTTPError, r'^500 Server Error: Internal Server Error'):
             output = self.openGitHubHook(payload=payload)
 
 
@@ -1160,7 +1169,7 @@ class GitHubPostCommitHookWithCacheTests(GitHubPostCommitHookTests):
     cached_git = True
 
 
-class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
+class GitHubAPIMock(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         # Visibly differentiate GitHub API mock logging from tracd logs
         sys.stderr.write("%s [%s] %s\n" %
@@ -1221,7 +1230,7 @@ class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_header("Content-Type", contenttype)
         self.end_headers()
 
-        self.wfile.write(json.dumps(answer))
+        self.wfile.write(json.dumps(answer, ensure_ascii=True).encode('ascii'))
 
     def do_POST(self):
         md = self.server.mockdata
@@ -1239,9 +1248,9 @@ class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
             chunk = self.rfile.read(chunk_size)
             if not chunk:
                 break
-            L.append(chunk)
+            L.append(chunk.decode('ascii'))
             size_remaining -= len(L[-1])
-        args = urlparse.parse_qs(''.join(L))
+        args = parse_qs(''.join(L))
 
         retcode = 404
         answer = {}
@@ -1255,7 +1264,7 @@ class GitHubAPIMock(BaseHTTPServer.BaseHTTPRequestHandler):
         self.send_response(retcode)
         self.send_header("Content-Type", contenttype)
         self.end_headers()
-        self.wfile.write(json.dumps(answer))
+        self.wfile.write(json.dumps(answer, ensure_ascii=True).encode('ascii'))
 
 
 class TracContext(object):
@@ -1836,7 +1845,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             self.assertGreater(len(data), 0, "No groups returned after update")
             self.assertIn(users[0]["login"], data,
                           "User %s expected after update, but not present" % users[0]["login"])
-            self.assertItemsEqual(
+            six.assertCountEqual(self,
                 data[users[0]["login"]],
                 (u"github-%s-justice-league" % self.organization, u"github-%s" % self.organization),
                 "User %s does not have expected groups after update" % users[0]["login"])
@@ -1901,7 +1910,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             self.assertGreater(len(data), 0, "No groups returned after update")
             self.assertIn(users[1]["login"], data,
                           "User %s expected after update, but not present" % users[1]["login"])
-            self.assertItemsEqual(
+            six.assertCountEqual(self,
                 data[users[1]["login"]],
                 (u"github-%s-justice-league" % self.organization, u"github-%s" % self.organization),
                 "User %s does not have expected groups after update" % users[1]["login"])
@@ -2113,7 +2122,7 @@ def updateMockData(md, retcode=None, contenttype=None, answers=None,
                     JSON-encoded and returned for requests to the paths.
     :param postcallback: A callback function called for the next POST requests.
                          Arguments are the requested path and a dict of POST
-                         data as returned by `urlparse.parse_qs()`. The
+                         data as returned by `parse_qs()`. The
                          callback should return a tuple `(retcode, answer)`
                          where `retcode` is the HTTP return code and `answer`
                          will be JSON-encoded and sent to the client. Note that
@@ -2148,7 +2157,7 @@ def apiMockServer(port, mockdata):
                      be JSON-encoded and returned. Use `updateMockData()` to
                      update the contents of the mockdata dict.
     """
-    httpd = BaseHTTPServer.HTTPServer(('127.0.0.1', port), GitHubAPIMock)
+    httpd = HTTPServer(('127.0.0.1', port), GitHubAPIMock)
     # Make mockdata available to server
     httpd.mockdata = mockdata
     httpd.serve_forever()
