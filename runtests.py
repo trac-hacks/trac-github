@@ -139,6 +139,8 @@ class TracGitHubTests(unittest.TestCase):
         with open(d(CONF), 'rb') as fp:
             conf.readfp(fp)
 
+        conf.set('trac', 'base_url', URL)
+
         conf.add_section('components')
         conf.set('components', 'trac.versioncontrol.web_ui.browser.BrowserModule', 'disabled')
         conf.set('components', 'trac.versioncontrol.web_ui.changeset.ChangesetModule', 'disabled')
