@@ -1528,8 +1528,8 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                     "slug": u"gentlepeople"
                 }
             ],
-            '/teams/1/members': team1members,
-            '/teams/12/members': team12members
+            '/organizations/%s/team/1/members' % self.organization: team1members,
+            '/organizations/%s/team/12/members' % self.organization: team12members
         })
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
@@ -1711,8 +1711,8 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                     "slug": u"gentlepeople"
                 }
             ],
-            '/teams/1/members': team1members,
-            '/teams/12/members': team12members
+            '/organizations/%s/team/1/members' % self.organization: team1members,
+            '/organizations/%s/team/12/members' % self.organization: team12members
         })
 
         update = {
@@ -1744,7 +1744,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                         "slug": u"gentlepeople"
                     }
                 ],
-                '/teams/12/members': team12members
+                '/organizations/%s/team/12/members' % self.organization: team12members
             })
 
             # Send the delete event
@@ -1829,7 +1829,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                         "slug": u"justice-league"
                     },
                 ],
-                '/teams/1/members': team1members,
+                '/organizations/%s/team/1/members' % self.organization: team1members,
             })
 
             # Send the update event
@@ -1872,7 +1872,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                     "slug": u"justice-league"
                 },
             ],
-            '/teams/1/members': list(team1members)
+            '/organizations/%s/team/1/members' % self.organization: list(team1members)
         })
 
         update = {
@@ -1894,7 +1894,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                         "slug": u"justice-league"
                     },
                 ],
-                '/teams/1/members': list(team1members)
+                '/organizations/%s/team/1/members' % self.organization: list(team1members)
             })
 
             # Send the update event
@@ -1937,7 +1937,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                     "slug": u"justice-league"
                 },
             ],
-            '/teams/1/members': list(team1members)
+            '/organizations/%s/team/1/members' % self.organization: list(team1members)
         })
 
         update = {
@@ -1959,7 +1959,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                         "slug": u"justice-league"
                     },
                 ],
-                '/teams/1/members': list(team1members)
+                '/organizations/%s/team/1/members' % self.organization: list(team1members)
             })
 
             # Send the update event

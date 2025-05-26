@@ -475,11 +475,12 @@ class GitHubTeam(GitHubUserCollection):
         :param slug: the GitHub team shortname in URL representation
         """
         self._teamid = teamid
+        self._orgid = org
         fullname = '-'.join(['github', org, slug])
         super(GitHubTeam, self).__init__(api, env, fullname)
 
     def _apicall_parameters(self):
-        return ("teams/{}/members", self._teamid)
+        return ("organizations/{}/team/{}/members", self._orgid, self._teamid)
 
 #class GitHubOrgMembers(GitHubUserCollection):
 #    """
