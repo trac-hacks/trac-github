@@ -1519,17 +1519,19 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             '/orgs/%s/teams' % self.organization: [
                 {
                     "id": 1,
+                    "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                     "name": u"Justice League",
                     "slug": u"justice-league"
                 },
                 {
                     "id": 12,
+                    "url": u"%sorganizations/14143/team/12" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                     "name": u"The League of Extraordinary Gentlemen and Gentlewomen",
                     "slug": u"gentlepeople"
                 }
             ],
-            '/organizations/%s/team/1/members' % self.organization: team1members,
-            '/organizations/%s/team/12/members' % self.organization: team12members
+            '/organizations/14143/team/1/members': team1members,
+            '/organizations/14143/team/12/members': team12members
         })
 
         with TracContext(self, env=self.tracd_env_debug, **self.trac_env):
@@ -1702,22 +1704,25 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             '/orgs/%s/teams' % self.organization: [
                 {
                     "id": 1,
+                    "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                     "name": u"Justice League",
                     "slug": u"justice-league"
                 },
                 {
                     "id": 12,
+                    "url": u"%sorganizations/14143/team/12" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                     "name": u"The League of Extraordinary Gentlemen and Gentlewomen",
                     "slug": u"gentlepeople"
                 }
             ],
-            '/organizations/%s/team/1/members' % self.organization: team1members,
-            '/organizations/%s/team/12/members' % self.organization: team12members
+            '/organizations/14143/team/1/members': team1members,
+            '/organizations/14143/team/12/members': team12members
         })
 
         update = {
             "team": {
                 "id": 1,
+                "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                 "name": u"Justice League",
                 "deleted": True
             }
@@ -1740,11 +1745,12 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                 '/orgs/%s/teams' % self.organization: [
                     {
                         "id": 12,
+                        "url": u"%sorganizations/14143/team/12" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                         "name": u"The League of Extraordinary Gentlemen and Gentlewomen",
                         "slug": u"gentlepeople"
                     }
                 ],
-                '/organizations/%s/team/12/members' % self.organization: team12members
+                '/organizations/14143/team/12/members': team12members
             })
 
             # Send the delete event
@@ -1782,6 +1788,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         update = {
             "team": {
                 "id": 1,
+                "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                 "name": u"Justice League",
                 "deleted": True
             }
@@ -1809,6 +1816,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         update = {
             "team": {
                 "id": 1,
+                "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                 "name": u"Justice League",
                 "slug": u"justice-league"
             }
@@ -1825,11 +1833,12 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                 '/orgs/%s/teams' % self.organization: [
                     {
                         "id": 1,
+                        "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                         "name": u"Justice League",
                         "slug": u"justice-league"
                     },
                 ],
-                '/organizations/%s/team/1/members' % self.organization: team1members,
+                '/organizations/14143/team/1/members': team1members,
             })
 
             # Send the update event
@@ -1868,16 +1877,18 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             '/orgs/%s/teams' % self.organization: [
                 {
                     "id": 1,
+                    "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                     "name": u"Justice League",
                     "slug": u"justice-league"
                 },
             ],
-            '/organizations/%s/team/1/members' % self.organization: list(team1members)
+            '/organizations/14143/team/1/members': list(team1members)
         })
 
         update = {
             "team": {
                 "id": 1,
+                "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                 "name": u"Justice League",
                 "slug": u"justice-league"
             }
@@ -1890,11 +1901,12 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                 '/orgs/%s/teams' % self.organization: [
                     {
                         "id": 1,
+                        "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                         "name": u"Justice League",
                         "slug": u"justice-league"
                     },
                 ],
-                '/organizations/%s/team/1/members' % self.organization: list(team1members)
+                '/organizations/14143/team/1/members': list(team1members)
             })
 
             # Send the update event
@@ -1933,16 +1945,18 @@ class GitHubGroupsProviderTests(TracGitHubTests):
             '/orgs/%s/teams' % self.organization: [
                 {
                     "id": 1,
+                    "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                     "name": u"Justice League",
                     "slug": u"justice-league"
                 },
             ],
-            '/organizations/%s/team/1/members' % self.organization: list(team1members)
+            '/organizations/14143/team/1/members': list(team1members)
         })
 
         update = {
             "team": {
                 "id": 1,
+                "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                 "name": u"Justice League",
                 "slug": u"justice-league"
             }
@@ -1955,11 +1969,12 @@ class GitHubGroupsProviderTests(TracGitHubTests):
                 '/orgs/%s/teams' % self.organization: [
                     {
                         "id": 1,
+                        "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                         "name": u"Justice League",
                         "slug": u"justice-league"
                     },
                 ],
-                '/organizations/%s/team/1/members' % self.organization: list(team1members)
+                '/organizations/14143/team/1/members': list(team1members)
             })
 
             # Send the update event
@@ -2072,6 +2087,7 @@ class GitHubGroupsProviderTests(TracGitHubTests):
         update = {
             "team": {
                 "id": 1,
+                "url": u"%sorganizations/14143/team/1" % self.tracd_env_debug.get('TRAC_GITHUB_API_URL'),
                 "name": u"Justice League",
                 "deleted": True
             }

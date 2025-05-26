@@ -464,23 +464,23 @@ class GitHubTeam(GitHubUserCollection):
     get a list of GitHub login names that are part of this group. To access the
     full name of this team, use the `fullname()` method.
     """
-    def __init__(self, api, env, org, teamid, slug): # pylint: disable=too-many-arguments
+    def __init__(self, api, env, org, url, slug): # pylint: disable=too-many-arguments
         """
         Create a new team.
 
         :param api: the `GitHubGroupsProvider` providing API access
         :param env: the `TracEnvironment` context used to cache results
         :param org: the name of the organization of the team
-        :param teamid: the GitHub team ID of the team
+        :param url: the GitHub API URL of the team
         :param slug: the GitHub team shortname in URL representation
         """
-        self._teamid = teamid
+        self._url = url
         self._orgid = org
         fullname = '-'.join(['github', org, slug])
         super(GitHubTeam, self).__init__(api, env, fullname)
 
     def _apicall_parameters(self):
-        return ("organizations/{}/team/{}/members", self._orgid, self._teamid)
+        return ("{}/members", self._url)
 
 #class GitHubOrgMembers(GitHubUserCollection):
 #    """
@@ -527,7 +527,8 @@ class GitHubOrgTeams(GitHubCachedAPI):
         return ("orgs/{}/teams", self._org)
 
     def _apiresult_postprocess(self, json_obj):
-        return {team['slug']: team['id'] for team in json_obj}
+        github_api_url = os.environ.get("TRAC_GITHUB_API_URL", "https://api.github.com/").rstrip('/') + '/'
+        return {team['slug']: team['url'][len(github_api_url):] for team in json_obj}
 
     def _apiresult_error(self):
         return {}
