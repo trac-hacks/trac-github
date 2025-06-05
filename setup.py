@@ -18,6 +18,9 @@ setup(
     namespace_packages=['tracext'],
     platforms='all',
     license='BSD',
+    install_requires=[
+        'six==1.16.0',
+    ],
     extras_require={'oauth': ['requests_oauthlib >= 0.5']},
     entry_points={'trac.plugins': [
         'github.browser = tracext.github:GitHubBrowser',
@@ -27,4 +30,16 @@ setup(
     ]},
     test_suite='runtests',
     tests_require='lxml',
+    classifiers=[
+        'Programming Language :: Python',
+        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Framework :: Trac',
+    ],
 )

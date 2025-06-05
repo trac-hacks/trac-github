@@ -14,14 +14,15 @@ jobs:
     - run: git config --global user.email runtest@localhost
     - run: nox --non-interactive --error-on-missing-interpreter --session runtests -- --git-default-branch=master
 
-#  runtests-py3:
-#    runs-on: ubuntu-latest
-#    steps:
-#    - uses: wntrblm/nox@2022.8.7
-#      with:
-#        python-versions: "3.7"
-#    - uses: actions/checkout@v4
-#    - run: git config --global user.name runtest
-#    - run: git config --global user.email runtest@localhost
-#    - run: git config --global init.defaultBranch main
-#    - run: nox --non-interactive --error-on-missing-interpreter --session runtests
+  runtests-py3:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: wntrblm/nox@2022.8.7
+      with:
+        python-versions: "3.7, 3.8, 3.9, 3.10, 3.11, 3.12"  # duplicated in noxfile.py
+    - uses: actions/checkout@v4
+    - run: git config --global user.name runtest
+    - run: git config --global user.email runtest@localhost
+    - run: git config --global init.defaultBranch main
+    - run: nox --non-interactive --error-on-missing-interpreter --session runtests

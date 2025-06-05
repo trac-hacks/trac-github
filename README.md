@@ -518,6 +518,7 @@ Changelog
 * Add configuration option for path prefix of login and logout. (#127)
 * Add `GitHubPolicy` permission policy to make `[timeline]`
   `changeset_show_file` option work correctly. (#126)
+* Support for Python3 (tested with 3.7 - 3.12) (requires Trac >= 1.6)
 
 ### 2.3
 
