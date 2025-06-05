@@ -32,7 +32,12 @@ from lxml import html
 
 from trac.env import Environment
 from trac.ticket.model import Ticket
+from trac.test import MockRequest
 from trac.util.translation import _
+from trac.web.api import RequestDone
+from trac.web.main import RequestDispatcher
+
+from tracext.github import GitHubLoginModule
 
 import requests
 
@@ -138,6 +143,8 @@ class TracGitHubTests(unittest.TestCase):
         conf = ConfigParser.ConfigParser()
         with open(d(CONF), 'rb') as fp:
             conf.readfp(fp)
+
+        conf.set('trac', 'base_url', URL)
 
         conf.add_section('components')
         conf.set('components', 'trac.versioncontrol.web_ui.browser.BrowserModule', 'disabled')
@@ -461,10 +468,72 @@ class GitHubLoginModuleTests(TracGitHubTests):
         self.assertIn(
             "Invalid request. Please try to login again.", response.text)
 
+    def assertLogoutSuccessful(self, req):
+        if req.method == 'POST':
+            # Trac's MockRequest doesn't seem to have a way to specify a content-type but we need
+            # one here to trigger Trac's CSRF protection (__FORM_TOKEN)
+            req._inheaders.insert(0, ('content-type', 'multipart/form-data'))
+
+        dispatcher = RequestDispatcher(self.env)
+
+        with self.assertRaises(RequestDone):  # That's how Trac signals redirections
+            dispatcher.dispatch(req)
+
+        self.assertNotIn('oauth_state', req.session)
+        self.assertEqual(req.outcookie['trac_auth'].value, '')
+        self.assertEqual(req.status_sent, ["303 See Other"])
+        self.assertEqual(req.headers_sent["Location"], URL)
+
     def testLogout(self):
-        response = requests.get(URL + '/github/logout', allow_redirects=False)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.headers['Location'], URL)
+        req = MockRequest(
+            self.env,
+            path_info='/github/logout',  # MockRequest automatically prepends the env's 'repo name
+            method="POST",
+            authname='test',
+            form_token='secret',
+            args={'__FORM_TOKEN': 'secret'},
+        )
+        req.session['oauth_state'] = 'test'  # not technically a valid state, but works for here
+        self.assertLogoutSuccessful(req)
+
+    def _getNavItems(self, **requestkwargs):
+        req = MockRequest(self.env, **requestkwargs)
+        component = GitHubLoginModule(self.env)
+
+        navitems = {}
+        for menu, slug, content in component.get_navigation_items(req):
+            navitems.setdefault(menu, {})[slug] = str(content)
+
+        return navitems
+
+    def testNavigationItemsWithAnonymousUser(self):
+        navitems = self._getNavItems(script_name='')  # needed to make the href relative
+
+        self.assertEqual(
+            navitems,
+            {'metanav': {'github_login': '<a href="/github/login">GitHub Login</a>'}}
+        )
+
+    def testNavigationItemsWithAuthenticatedUser(self):
+        navitems = self._getNavItems(authname='test')
+
+        self.assertEqual(navitems['metanav']['login'], 'logged in as test')
+        # The content of metanav[logout] is tested in the next method
+
+    def testNavigationItemLogout(self):
+        navitems = self._getNavItems(script_name='', authname='test', form_token='secret')
+        form = html.fromstring(navitems['metanav']['logout'])
+
+        req = MockRequest(
+            self.env,
+            path_info=form.action,
+            method=form.method.upper(),
+            args=form.fields,
+            authname='test',
+            form_token='secret',
+        )
+
+        self.assertLogoutSuccessful(req)
 
 class GitHubLoginModuleConfigurationTests(TracGitHubTests):
     # Append custom failure messages to the automatically generated ones

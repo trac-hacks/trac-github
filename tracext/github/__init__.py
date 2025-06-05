@@ -129,7 +129,9 @@ class GitHubLoginModule(GitHubMixin, LoginModule):
                 yield ('metanav', 'logout',
                        tag.form(tag.div(tag.button(_('Logout'),
                                                    name='logout',
-                                                   type='submit')),
+                                                   type='submit'),
+                                        tag.input(type="hidden", name="__FORM_TOKEN",
+                                                  value=req.form_token)),
                                 action=logout_href, method='post', id='logout',
                                 class_='trac-logout'))
         else:
